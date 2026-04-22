@@ -1,11 +1,17 @@
 import "./globals.css";
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#0A0A0F",
+};
+
 export const metadata = {
   title: "GoaNow 🔥 — Know what's happening in Goa. Right now.",
   description:
     "Nearby cafes, live party intel, AI-built Goa itineraries. Built for tourists. Only ₹99 for your whole trip.",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
-  themeColor: "#0A0A0F",
+  metadataBase: new URL("https://goanow.in"),
   openGraph: {
     title: "GoaNow 🔥",
     description:
