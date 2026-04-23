@@ -156,6 +156,7 @@ function AdminDashboard({ onLogout }) {
   const [trialKeys, setTrialKeys] = useState([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
   const [newKey, setNewKey] = useState({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
   const formRef = useRef(null);
 
@@ -432,8 +433,9 @@ function AdminDashboard({ onLogout }) {
           trip: { ...data.pricing.trip },
         });
         if (data.trial_keys) setTrialKeys(data.trial_keys);
+        setDbStatus(data.db_status || "ok");
       }
-    } catch {}
+    } catch { setDbStatus("error"); }
     setSettingsLoading(false);
   };
 
@@ -446,8 +448,15 @@ function AdminDashboard({ onLogout }) {
         body: JSON.stringify({ pricing, trial_keys: trialKeys }),
       });
       const data = await res.json();
-      if (data.success) showToast("Settings saved ✅");
-      else showToast(data.error || "Save failed");
+      if (data.success) {
+        showToast("Settings saved ✅");
+        setDbStatus("ok");
+      } else if (data.setup_required) {
+        setDbStatus("table_missing");
+        showToast("Settings table missing in Supabase — see setup instructions below");
+      } else {
+        showToast(data.error || "Save failed");
+      }
     } catch { showToast("Save failed"); }
     setSettingsSaving(false);
   };
@@ -524,6 +533,31 @@ function AdminDashboard({ onLogout }) {
             <div style={{ color: "var(--text-muted)", padding: 20 }}>Loading settings...</div>
           ) : (
             <>
+              {/* DB STATUS BANNER */}
+              {dbStatus === "table_missing" && (
+                <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.4)", borderRadius: 12, padding: 16 }}>
+                  <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 8 }}>⚠️ Supabase settings table missing</div>
+                  <p style={{ color: "var(--text-muted)", fontSize: 13, margin: "0 0 10px" }}>
+                    Trial keys from Railway env vars still work. To save keys via admin panel, run this SQL in your Supabase SQL editor:
+                  </p>
+                  <pre style={{ background: "rgba(0,0,0,0.4)", borderRadius: 8, padding: 12, fontSize: 11, color: "#a3e635", overflowX: "auto", margin: 0 }}>{`CREATE TABLE IF NOT EXISTS settings (
+  key         TEXT        PRIMARY KEY,
+  value       JSONB       NOT NULL,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service full access" ON settings FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');`}</pre>
+                </div>
+              )}
+
+              {dbStatus === "ok" && (
+                <div style={{ background: "rgba(0,255,200,0.05)", border: "1px solid rgba(0,255,200,0.2)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "var(--neon-cyan)" }}>
+                  ✅ Supabase settings table connected
+                </div>
+              )}
+
               {/* PRICING */}
               <div className="glass-card" style={{ padding: 18 }}>
                 <h2 style={{ margin: "0 0 16px", fontSize: 24, color: "#fff" }}>💰 Pricing</h2>
@@ -559,9 +593,12 @@ function AdminDashboard({ onLogout }) {
               {/* TRIAL KEYS */}
               <div className="glass-card" style={{ padding: 18 }}>
                 <h2 style={{ margin: "0 0 4px", fontSize: 24, color: "#fff" }}>🔑 Trial Keys</h2>
-                <p style={{ color: "var(--text-muted)", margin: "0 0 16px", fontSize: 13 }}>
-                  Give free access to testers, influencers or press. Each key can be used a limited number of times.
+                <p style={{ color: "var(--text-muted)", margin: "0 0 8px", fontSize: 13 }}>
+                  Give free access to testers, influencers or press.
                 </p>
+                <div style={{ background: "rgba(0,245,255,0.05)", border: "1px solid rgba(0,245,255,0.15)", borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 12, color: "var(--text-muted)" }}>
+                  <strong style={{ color: "var(--neon-cyan)" }}>Quickest way:</strong> Add <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 5px", borderRadius: 4 }}>TRIAL_KEYS=CODE:HOURS</code> to Railway Variables (e.g. <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 5px", borderRadius: 4 }}>GOA2024:168</code>). Works immediately, no DB needed.
+                </div>
 
                 {/* Add new key */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 80px auto", gap: 8, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>
@@ -600,15 +637,21 @@ function AdminDashboard({ onLogout }) {
                       </thead>
                       <tbody>
                         {trialKeys.map((k) => (
-                          <tr key={k.code} style={{ borderTop: "1px solid var(--border-glass)" }}>
-                            <td style={{ padding: "10px", color: "var(--neon-cyan)", fontFamily: "monospace", letterSpacing: "0.1em" }}>{k.code}</td>
+                          <tr key={k.code} style={{ borderTop: "1px solid var(--border-glass)", opacity: k.from_env ? 0.75 : 1 }}>
+                            <td style={{ padding: "10px", color: "var(--neon-cyan)", fontFamily: "monospace", letterSpacing: "0.1em" }}>
+                              {k.code}
+                              {k.from_env && <span style={{ marginLeft: 6, fontSize: 9, background: "rgba(0,245,255,0.15)", color: "var(--neon-cyan)", padding: "1px 5px", borderRadius: 4 }}>ENV</span>}
+                            </td>
                             <td style={{ padding: "10px", color: "#fff" }}>{k.label}</td>
                             <td style={{ padding: "10px", color: "#fff" }}>{k.duration_hours}h</td>
                             <td style={{ padding: "10px", color: k.used_count >= k.max_uses ? "#fca5a5" : "#fff" }}>
-                              {k.used_count}/{k.max_uses}
+                              {k.from_env ? "∞" : `${k.used_count}/${k.max_uses}`}
                             </td>
                             <td style={{ padding: "10px" }}>
-                              <button onClick={() => removeTrialKey(k.code)} className="neon-btn-ghost" style={{ padding: "4px 8px", minHeight: 28, fontSize: 12, borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>🗑️</button>
+                              {k.from_env
+                                ? <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Railway env</span>
+                                : <button onClick={() => removeTrialKey(k.code)} className="neon-btn-ghost" style={{ padding: "4px 8px", minHeight: 28, fontSize: 12, borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>🗑️</button>
+                              }
                             </td>
                           </tr>
                         ))}
