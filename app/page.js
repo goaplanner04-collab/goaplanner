@@ -1,11 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PaywallModal from "@/components/PaywallModal";
+
+const DEFAULT_PLANS = [
+  { key: "day",  name: "Day Pass",  price: 49,  duration: "24 hours" },
+  { key: "week", name: "Week Pass", price: 99,  duration: "7 days",  popular: true },
+  { key: "trip", name: "Trip Pass", price: 149, duration: "30 days" },
+];
 
 export default function LandingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [initialPlan, setInitialPlan] = useState("week");
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.pricing) {
+          setPlans(["day", "week", "trip"].map((key) => {
+            const p = d.pricing[key] || {};
+            return { key, name: p.name || key, price: p.price, duration: p.label, popular: !!p.popular };
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const openModal = (plan) => {
     setInitialPlan(plan);
@@ -30,11 +51,6 @@ export default function LandingPage() {
     }
   ];
 
-  const plans = [
-    { key: "day", name: "Day Pass", price: 49, duration: "24 hours" },
-    { key: "week", name: "Week Pass", price: 99, duration: "7 days", popular: true },
-    { key: "trip", name: "Trip Pass", price: 149, duration: "30 days" }
-  ];
 
   return (
     <main

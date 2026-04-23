@@ -145,6 +145,16 @@ function AdminDashboard({ onLogout }) {
   const [scrapedEvents, setScrapedEvents] = useState([]);
   const [selectedScrape, setSelectedScrape] = useState({});
   const [importing, setImporting] = useState(false);
+  const [activeTab, setActiveTab] = useState("events");
+  const [pricing, setPricing] = useState({
+    day:  { price: 49,  name: "Day Pass",  label: "24 hours", popular: false },
+    week: { price: 99,  name: "Week Pass", label: "7 days",   popular: true  },
+    trip: { price: 149, name: "Trip Pass", label: "30 days",  popular: false },
+  });
+  const [trialKeys, setTrialKeys] = useState([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [newKey, setNewKey] = useState({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
   const formRef = useRef(null);
 
   const showToast = (msg) => {
@@ -399,6 +409,52 @@ function AdminDashboard({ onLogout }) {
     }
   };
 
+  const loadSettings = async () => {
+    setSettingsLoading(true);
+    try {
+      const res = await fetch("/api/admin/settings", { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.success) {
+        if (data.pricing) setPricing({
+          day:  { ...data.pricing.day  },
+          week: { ...data.pricing.week },
+          trip: { ...data.pricing.trip },
+        });
+        if (data.trial_keys) setTrialKeys(data.trial_keys);
+      }
+    } catch {}
+    setSettingsLoading(false);
+  };
+
+  const saveSettings = async () => {
+    setSettingsSaving(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ pricing, trial_keys: trialKeys }),
+      });
+      const data = await res.json();
+      if (data.success) showToast("Settings saved ✅");
+      else showToast(data.error || "Save failed");
+    } catch { showToast("Save failed"); }
+    setSettingsSaving(false);
+  };
+
+  const addTrialKey = () => {
+    if (!newKey.code.trim()) { showToast("Enter a key code"); return; }
+    const code = newKey.code.trim().toUpperCase();
+    if (trialKeys.find((k) => k.code === code)) { showToast("Key already exists"); return; }
+    setTrialKeys((prev) => [...prev, { ...newKey, code, used_count: 0 }]);
+    setNewKey({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
+  };
+
+  const removeTrialKey = (code) => setTrialKeys((prev) => prev.filter((k) => k.code !== code));
+
+  useEffect(() => {
+    if (activeTab === "settings") loadSettings();
+  }, [activeTab]);
+
   const aiBadge = (
     <span
       style={{
@@ -437,7 +493,129 @@ function AdminDashboard({ onLogout }) {
         </button>
       </div>
 
-      <div
+      {/* TABS */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {[{ id: "events", label: "📅 Events" }, { id: "settings", label: "⚙️ Settings & Pricing" }].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={activeTab === t.id ? "neon-btn" : "neon-btn-ghost"}
+            style={{ fontSize: 14, padding: "8px 20px", minHeight: 36 }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "settings" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {settingsLoading ? (
+            <div style={{ color: "var(--text-muted)", padding: 20 }}>Loading settings...</div>
+          ) : (
+            <>
+              {/* PRICING */}
+              <div className="glass-card" style={{ padding: 18 }}>
+                <h2 style={{ margin: "0 0 16px", fontSize: 24, color: "#fff" }}>💰 Pricing</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+                  {["day", "week", "trip"].map((key) => (
+                    <div key={key} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-glass)", borderRadius: 12, padding: 14 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
+                        {key} pass
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          Display Name
+                          <input className="input-field" style={{ marginTop: 4 }} value={pricing[key]?.name || ""} onChange={(e) => setPricing((p) => ({ ...p, [key]: { ...p[key], name: e.target.value } }))} />
+                        </label>
+                        <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          Price (₹)
+                          <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={pricing[key]?.price || ""} onChange={(e) => setPricing((p) => ({ ...p, [key]: { ...p[key], price: parseInt(e.target.value) || 0 } }))} />
+                        </label>
+                        <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          Duration Label
+                          <input className="input-field" style={{ marginTop: 4 }} value={pricing[key]?.label || ""} onChange={(e) => setPricing((p) => ({ ...p, [key]: { ...p[key], label: e.target.value } }))} />
+                        </label>
+                        <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                          <input type="checkbox" checked={!!pricing[key]?.popular} onChange={(e) => setPricing((p) => ({ ...p, [key]: { ...p[key], popular: e.target.checked } }))} style={{ accentColor: "var(--neon-pink)" }} />
+                          Mark as Popular
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* TRIAL KEYS */}
+              <div className="glass-card" style={{ padding: 18 }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: 24, color: "#fff" }}>🔑 Trial Keys</h2>
+                <p style={{ color: "var(--text-muted)", margin: "0 0 16px", fontSize: 13 }}>
+                  Give free access to testers, influencers or press. Each key can be used a limited number of times.
+                </p>
+
+                {/* Add new key */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 80px auto", gap: 8, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Key Code
+                    <input className="input-field" style={{ marginTop: 4, textTransform: "uppercase", letterSpacing: "0.1em" }} placeholder="GOA2024" value={newKey.code} onChange={(e) => setNewKey((k) => ({ ...k, code: e.target.value.toUpperCase() }))} />
+                  </label>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Label
+                    <input className="input-field" style={{ marginTop: 4 }} placeholder="Trial Pass" value={newKey.label} onChange={(e) => setNewKey((k) => ({ ...k, label: e.target.value }))} />
+                  </label>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Hours
+                    <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={newKey.duration_hours} onChange={(e) => setNewKey((k) => ({ ...k, duration_hours: parseInt(e.target.value) || 168 }))} />
+                  </label>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Max Uses
+                    <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={newKey.max_uses} onChange={(e) => setNewKey((k) => ({ ...k, max_uses: parseInt(e.target.value) || 1 }))} />
+                  </label>
+                  <button type="button" onClick={addTrialKey} className="neon-btn-ghost" style={{ padding: "10px 14px", alignSelf: "end" }}>
+                    ➕ Add
+                  </button>
+                </div>
+
+                {trialKeys.length === 0 ? (
+                  <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No trial keys yet.</div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ color: "var(--text-muted)" }}>
+                          {["Code", "Label", "Duration", "Uses", ""].map((h) => (
+                            <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trialKeys.map((k) => (
+                          <tr key={k.code} style={{ borderTop: "1px solid var(--border-glass)" }}>
+                            <td style={{ padding: "10px", color: "var(--neon-cyan)", fontFamily: "monospace", letterSpacing: "0.1em" }}>{k.code}</td>
+                            <td style={{ padding: "10px", color: "#fff" }}>{k.label}</td>
+                            <td style={{ padding: "10px", color: "#fff" }}>{k.duration_hours}h</td>
+                            <td style={{ padding: "10px", color: k.used_count >= k.max_uses ? "#fca5a5" : "#fff" }}>
+                              {k.used_count}/{k.max_uses}
+                            </td>
+                            <td style={{ padding: "10px" }}>
+                              <button onClick={() => removeTrialKey(k.code)} className="neon-btn-ghost" style={{ padding: "4px 8px", minHeight: 28, fontSize: 12, borderColor: "rgba(239,68,68,0.3)", color: "#fca5a5" }}>🗑️</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <button type="button" onClick={saveSettings} disabled={settingsSaving} className="neon-btn" style={{ alignSelf: "flex-start", minWidth: 180 }}>
+                {settingsSaving ? "Saving..." : "💾 Save All Settings"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "events" && <div
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr)",
@@ -797,7 +975,7 @@ function AdminDashboard({ onLogout }) {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {toast && <div className="toast">{toast}</div>}
 
