@@ -145,6 +145,8 @@ function AdminDashboard({ onLogout }) {
   const [scrapedEvents, setScrapedEvents] = useState([]);
   const [selectedScrape, setSelectedScrape] = useState({});
   const [importing, setImporting] = useState(false);
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pastedHtml, setPastedHtml] = useState("");
   const [activeTab, setActiveTab] = useState("events");
   const [pricing, setPricing] = useState({
     day:  { price: 49,  name: "Day Pass",  label: "24 hours", popular: false },
@@ -352,32 +354,41 @@ function AdminDashboard({ onLogout }) {
     }
   };
 
-  const scrapeDistrict = async () => {
+  const scrapeDistrict = async (usePaste = false) => {
     setScraping(true);
     setScrapeError(null);
     setScrapedEvents([]);
     setSelectedScrape({});
     try {
+      const body = usePaste && pastedHtml.trim()
+        ? { pastedHtml }
+        : {};
       const res = await fetch("/api/admin/scrape-district", {
         method: "POST",
         headers: getAuthHeaders(),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!data.success) {
         setScrapeError(data.error || "Scrape failed");
+        if (data.usePaste) setPasteMode(true);
         return;
       }
       if (data.events.length === 0) {
-        setScrapeError("No Goa events found on district.in right now. Try again later.");
+        setScrapeError("No Goa events found. Try the Paste HTML method below.");
+        setPasteMode(true);
         return;
       }
       const sel = {};
       data.events.forEach((_, i) => { sel[i] = true; });
       setScrapedEvents(data.events);
       setSelectedScrape(sel);
+      setPasteMode(false);
+      setPastedHtml("");
       showToast(`Found ${data.events.length} event(s) from district.in ✨`);
     } catch {
-      setScrapeError("Failed to reach district.in. Check your connection.");
+      setScrapeError("Failed to reach district.in.");
+      setPasteMode(true);
     } finally {
       setScraping(false);
     }
@@ -820,18 +831,70 @@ function AdminDashboard({ onLogout }) {
               🌐 Import from District.in
             </h2>
             <p style={{ color: "var(--text-muted)", margin: "0 0 14px", fontSize: 13 }}>
-              Claude Haiku scrapes live Goa events from district.in and imports them automatically.
+              Claude Haiku extracts live Goa events from district.in.
             </p>
 
-            <button
-              type="button"
-              onClick={scrapeDistrict}
-              disabled={scraping}
-              className="neon-btn neon-btn-cyan"
-              style={{ width: "100%" }}
-            >
-              {scraping ? "🤖 Haiku is scanning district.in..." : "🔍 Fetch Goa Events from District.in"}
-            </button>
+            {/* Mode toggle */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button
+                type="button"
+                onClick={() => { setPasteMode(false); setScrapeError(null); }}
+                className={!pasteMode ? "neon-btn" : "neon-btn-ghost"}
+                style={{ flex: 1, fontSize: 13, padding: "8px 12px", minHeight: 36 }}
+              >
+                🔍 Auto Fetch
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPasteMode(true); setScrapeError(null); }}
+                className={pasteMode ? "neon-btn" : "neon-btn-ghost"}
+                style={{ flex: 1, fontSize: 13, padding: "8px 12px", minHeight: 36 }}
+              >
+                📋 Paste HTML
+              </button>
+            </div>
+
+            {!pasteMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => scrapeDistrict(false)}
+                  disabled={scraping}
+                  className="neon-btn neon-btn-cyan"
+                  style={{ width: "100%" }}
+                >
+                  {scraping ? "🤖 Haiku is scanning district.in..." : "🔍 Fetch Goa Events from District.in"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ background: "rgba(0,245,255,0.05)", border: "1px solid rgba(0,245,255,0.2)", borderRadius: 10, padding: 12, marginBottom: 10, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                  <strong style={{ color: "var(--neon-cyan)" }}>How to paste Goa events:</strong>
+                  <ol style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                    <li>Open <strong>district.in</strong> in your browser</li>
+                    <li>Make sure <strong>Goa</strong> is selected as city (as shown in the top bar)</li>
+                    <li>Press <strong>Ctrl+A</strong> then <strong>Ctrl+C</strong> to copy the whole page</li>
+                    <li>Paste below and click Extract</li>
+                  </ol>
+                </div>
+                <textarea
+                  value={pastedHtml}
+                  onChange={(e) => setPastedHtml(e.target.value)}
+                  placeholder="Paste the copied page content here..."
+                  className="input-field"
+                  style={{ width: "100%", minHeight: 120, resize: "vertical", fontSize: 12, fontFamily: "monospace", marginBottom: 10, boxSizing: "border-box" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => scrapeDistrict(true)}
+                  disabled={scraping || !pastedHtml.trim()}
+                  className="neon-btn neon-btn-cyan"
+                  style={{ width: "100%" }}
+                >
+                  {scraping ? "🤖 Haiku is extracting events..." : "🤖 Extract Goa Events with Haiku"}
+                </button>
+              </>
+            )}
 
             {scrapeError && (
               <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: 8, fontSize: 13 }}>
