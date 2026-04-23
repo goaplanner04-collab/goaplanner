@@ -140,6 +140,11 @@ function AdminDashboard({ onLogout }) {
   const [flyerPreview, setFlyerPreview] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeError, setScrapeError] = useState(null);
+  const [scrapedEvents, setScrapedEvents] = useState([]);
+  const [selectedScrape, setSelectedScrape] = useState({});
+  const [importing, setImporting] = useState(false);
   const formRef = useRef(null);
 
   const showToast = (msg) => {
@@ -334,6 +339,63 @@ function AdminDashboard({ onLogout }) {
       setExtractError("Couldn't read flyer clearly. Please fill in manually.");
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const scrapeDistrict = async () => {
+    setScraping(true);
+    setScrapeError(null);
+    setScrapedEvents([]);
+    setSelectedScrape({});
+    try {
+      const res = await fetch("/api/admin/scrape-district", {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setScrapeError(data.error || "Scrape failed");
+        return;
+      }
+      if (data.events.length === 0) {
+        setScrapeError("No Goa events found on district.in right now. Try again later.");
+        return;
+      }
+      const sel = {};
+      data.events.forEach((_, i) => { sel[i] = true; });
+      setScrapedEvents(data.events);
+      setSelectedScrape(sel);
+      showToast(`Found ${data.events.length} event(s) from district.in ✨`);
+    } catch {
+      setScrapeError("Failed to reach district.in. Check your connection.");
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  const importSelected = async () => {
+    const toImport = scrapedEvents.filter((_, i) => selectedScrape[i]);
+    if (!toImport.length) { showToast("Select at least one event"); return; }
+    setImporting(true);
+    try {
+      const res = await fetch("/api/admin/bulk-upload", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(toImport),
+      });
+      const data = await res.json();
+      if (data.inserted !== undefined) {
+        showToast(`Imported ${data.inserted} event(s)! 🎉`);
+        setScrapedEvents([]);
+        setSelectedScrape({});
+        fetchEvents();
+      } else {
+        showToast(data.error || "Import failed");
+      }
+    } catch {
+      showToast("Import failed");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -570,6 +632,96 @@ function AdminDashboard({ onLogout }) {
                 }}
               >
                 {extractError}
+              </div>
+            )}
+          </div>
+
+          {/* DISTRICT.IN IMPORT */}
+          <div className="glass-card" style={{ padding: 18 }}>
+            <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#fff" }}>
+              🌐 Import from District.in
+            </h2>
+            <p style={{ color: "var(--text-muted)", margin: "0 0 14px", fontSize: 13 }}>
+              Claude Haiku scrapes live Goa events from district.in and imports them automatically.
+            </p>
+
+            <button
+              type="button"
+              onClick={scrapeDistrict}
+              disabled={scraping}
+              className="neon-btn neon-btn-cyan"
+              style={{ width: "100%" }}
+            >
+              {scraping ? "🤖 Haiku is scanning district.in..." : "🔍 Fetch Goa Events from District.in"}
+            </button>
+
+            {scrapeError && (
+              <div style={{ marginTop: 10, padding: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", borderRadius: 8, fontSize: 13 }}>
+                {scrapeError}
+              </div>
+            )}
+
+            {scrapedEvents.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                    {Object.values(selectedScrape).filter(Boolean).length} of {scrapedEvents.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allSelected = scrapedEvents.every((_, i) => selectedScrape[i]);
+                      const next = {};
+                      scrapedEvents.forEach((_, i) => { next[i] = !allSelected; });
+                      setSelectedScrape(next);
+                    }}
+                    className="neon-btn-ghost"
+                    style={{ fontSize: 11, padding: "4px 10px", minHeight: 28 }}
+                  >
+                    {scrapedEvents.every((_, i) => selectedScrape[i]) ? "Deselect All" : "Select All"}
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 320, overflowY: "auto" }}>
+                  {scrapedEvents.map((ev, i) => (
+                    <label
+                      key={i}
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "flex-start",
+                        padding: 10,
+                        borderRadius: 8,
+                        background: selectedScrape[i] ? "rgba(0,255,200,0.06)" : "rgba(255,255,255,0.02)",
+                        border: `1px solid ${selectedScrape[i] ? "rgba(0,255,200,0.2)" : "var(--border-glass)"}`,
+                        cursor: "pointer"
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!selectedScrape[i]}
+                        onChange={(e) => setSelectedScrape((prev) => ({ ...prev, [i]: e.target.checked }))}
+                        style={{ marginTop: 2, accentColor: "var(--neon-cyan)" }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: "#fff" }}>{ev.name}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                          {ev.venue} · {ev.area} · {ev.date} · {ev.start_time || "TBC"} · {ev.entry_fee}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={importSelected}
+                  disabled={importing || !Object.values(selectedScrape).some(Boolean)}
+                  className="neon-btn"
+                  style={{ width: "100%", marginTop: 12 }}
+                >
+                  {importing ? "Importing..." : `⬇️ Import Selected Events`}
+                </button>
               </div>
             )}
           </div>
