@@ -10,81 +10,259 @@ const PLACEHOLDERS = [
   "First time in Goa, Baga area, Rs 5000 for 2 days, we love parties and seafood...",
 ];
 
+function getOrCreateSessionId() {
+  if (typeof window === "undefined") return "";
+  try {
+    let id = localStorage.getItem("goanow_session_id");
+    if (!id) {
+      id = (crypto.randomUUID?.() || `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+      localStorage.setItem("goanow_session_id", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 export default function ItineraryBuilder() {
   const [input, setInput] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [meta, setMeta] = useState(null); // { dataSource, placesChecked, redditSourced, userArea, language, budgetMissing, buildsRemaining }
   const [toast, setToast] = useState(null);
   const [phIndex, setPhIndex] = useState(0);
+  const [clarification, setClarification] = useState(null); // { message, areaSuggestions }
+  const [limitModal, setLimitModal] = useState(null); // { message }
+  const [shareId, setShareId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [thanked, setThanked] = useState(false);
+  const [budgetTipDismissed, setBudgetTipDismissed] = useState(false);
+  const [buildsRemaining, setBuildsRemaining] = useState(null);
   const resultRef = useRef(null);
+  const sessionIdRef = useRef("");
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setPhIndex((i) => (i + 1) % PLACEHOLDERS.length);
-    }, 4500);
+    sessionIdRef.current = getOrCreateSessionId();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setPhIndex((i) => (i + 1) % PLACEHOLDERS.length), 4500);
     return () => clearInterval(timer);
   }, []);
 
-  const handleSubmit = async (e) => {
-    if (e) e.preventDefault();
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const submitWithText = async (text) => {
     setError(null);
-
-    const trimmed = input.trim();
-    if (trimmed.length < 20) {
-      setError("Tell us a bit more: where are you staying and what is your budget?");
-      return;
-    }
-
+    setClarification(null);
+    setLimitModal(null);
     setLoading(true);
     setResult(null);
+    setMeta(null);
+    setShareId(null);
+    setThanked(false);
+    setBudgetTipDismissed(false);
+
     try {
       const res = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ message: text, sessionId: sessionIdRef.current }),
       });
       const data = await res.json();
+
+      if (data.limitReached) {
+        setLimitModal({ message: data.message || "You've used all 3 itinerary builds." });
+        setBuildsRemaining(0);
+        setLoading(false);
+        return;
+      }
+      if (data.needsClarification) {
+        setClarification({ message: data.message, areaSuggestions: data.areaSuggestions || [] });
+        if (typeof data.buildsRemaining === "number") setBuildsRemaining(data.buildsRemaining);
+        setLoading(false);
+        return;
+      }
       if (!res.ok || !data.itinerary) {
         setError(data.error || "Could not build your plan. Try again.");
         setLoading(false);
         return;
       }
+
       setResult(data.itinerary);
+      setMeta({
+        dataSource: data.dataSource,
+        placesChecked: data.placesChecked,
+        redditSourced: data.redditSourced,
+        userArea: data.userArea,
+        language: data.language,
+        budgetMissing: !!data.budgetMissing,
+      });
+      if (typeof data.buildsRemaining === "number") setBuildsRemaining(data.buildsRemaining);
+
+      // analytics fire-and-forget
+      fetch("/api/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_type: "itinerary_built",
+          area: data.userArea,
+          language: data.language,
+          data: { session_id: sessionIdRef.current, data_source: data.dataSource },
+        }),
+      }).catch(() => {});
+
       setLoading(false);
-      setTimeout(() => {
-        resultRef.current && resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 80);
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     } catch {
       setError("Network error. Check your connection.");
       setLoading(false);
     }
   };
 
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const trimmed = input.trim();
+    if (trimmed.length < 8) {
+      setError("Tell us a bit more: where are you staying and what is your budget?");
+      return;
+    }
+    submitWithText(trimmed);
+  };
+
+  const handleAreaPick = (area) => {
+    const newText = input.trim() + (input.trim() ? " · " : "") + `Staying in ${area}`;
+    setInput(newText);
+    setClarification(null);
+    submitWithText(newText);
+  };
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(result);
-      setToast("Copied");
-      setTimeout(() => setToast(null), 2500);
+      showToast("Copied");
     } catch {
-      setToast("Could not copy. Try selecting manually.");
-      setTimeout(() => setToast(null), 2500);
+      showToast("Could not copy. Try selecting manually.");
     }
+  };
+
+  const handleSavePlan = async () => {
+    if (!result) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/save-itinerary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itineraryText: result,
+          userArea: meta?.userArea,
+          durationDays: null,
+          language: meta?.language,
+          dataSource: meta?.dataSource,
+          placesChecked: meta?.placesChecked,
+          redditSourced: meta?.redditSourced,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.shareId) {
+        setShareId(data.shareId);
+        try {
+          const stored = JSON.parse(localStorage.getItem("goanow_saved_plans") || "[]");
+          if (!stored.includes(data.shareId)) {
+            stored.push(data.shareId);
+            localStorage.setItem("goanow_saved_plans", JSON.stringify(stored));
+          }
+        } catch {}
+        showToast("Plan saved! 🎉");
+        fetch("/api/analytics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_type: "plan_saved", data: { share_id: data.shareId } }),
+        }).catch(() => {});
+      } else {
+        showToast(data.error || "Save failed");
+      }
+    } catch {
+      showToast("Save failed");
+    }
+    setSaving(false);
+  };
+
+  const handleSharePlan = async () => {
+    if (!shareId) return;
+    const url = `${window.location.origin}/plan/${shareId}`;
+    fetch("/api/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: "plan_shared", data: { share_id: shareId } }),
+    }).catch(() => {});
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "My Goa Plan — GoaNow 🔥", text: "Check out my Goa itinerary!", url });
+        return;
+      } catch {
+        // fall through to clipboard
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied!");
+    } catch {
+      showToast(url);
+    }
+  };
+
+  const handleRate = async (rating) => {
+    if (!shareId || thanked) return;
+    setThanked(true);
+    fetch("/api/rate-itinerary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shareId, rating }),
+    }).catch(() => {});
+    fetch("/api/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: rating === "up" ? "thumbs_up" : "thumbs_down", data: { share_id: shareId } }),
+    }).catch(() => {});
   };
 
   const handleReset = () => {
     setResult(null);
+    setMeta(null);
     setInput("");
     setError(null);
+    setShareId(null);
+    setThanked(false);
   };
+
+  const dataBadge = (() => {
+    if (!meta) return null;
+    if (meta.dataSource === "live") {
+      return {
+        text: `✓ Built with live Google Maps data — ${meta.placesChecked || 0} places checked${meta.userArea ? ` near ${meta.userArea}` : ""}${meta.redditSourced ? `, ${meta.redditSourced} with community intel` : ""}`,
+        color: "rgba(0,200,140,0.85)",
+      };
+    }
+    if (meta.dataSource === "partial") {
+      return { text: "⚡ Mostly live data — some saved data used", color: "rgba(251,191,36,0.85)" };
+    }
+    return {
+      text: "⚠️ Built from our curated Goa database — live data unavailable right now. Distances may vary.",
+      color: "rgba(251,191,36,0.85)",
+    };
+  })();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="glass-card" style={{ padding: 18 }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
-          <span className="icon-tile">
-            <Icon name="route" size={22} />
-          </span>
+          <span className="icon-tile"><Icon name="route" size={22} /></span>
           <h2 style={{ margin: 0, fontSize: 28, color: "var(--neon-pink)", textShadow: "0 0 16px rgba(255,45,120,0.32)" }}>
             AI Itinerary Builder
           </h2>
@@ -96,10 +274,7 @@ export default function ItineraryBuilder() {
         <form onSubmit={handleSubmit}>
           <textarea
             value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              if (error) setError(null);
-            }}
+            onChange={(e) => { setInput(e.target.value); if (error) setError(null); }}
             placeholder={PLACEHOLDERS[phIndex]}
             rows={5}
             className="input-field"
@@ -113,14 +288,47 @@ export default function ItineraryBuilder() {
             </div>
           )}
 
-          <button type="submit" disabled={loading} className="neon-btn" style={{ width: "100%", marginTop: 14, fontSize: 16 }}>
+          <button type="submit" disabled={loading || buildsRemaining === 0} className="neon-btn" style={{ width: "100%", marginTop: 14, fontSize: 16 }}>
             <Icon name="sparkles" size={18} />
             {loading ? "Building..." : "Build My Goa Plan"}
             {!loading && <Icon name="arrow-right" size={18} />}
           </button>
+
+          {typeof buildsRemaining === "number" && buildsRemaining >= 0 && (
+            <div style={{
+              marginTop: 10, fontSize: 13, textAlign: "center",
+              color: buildsRemaining === 1 ? "#FFD93D" : "var(--text-muted)",
+              fontWeight: buildsRemaining === 1 ? 600 : 400,
+            }}>
+              🎯 {buildsRemaining} itinerary build{buildsRemaining === 1 ? "" : "s"} remaining on your pass
+            </div>
+          )}
         </form>
       </div>
 
+      {/* CLARIFICATION CARD */}
+      {clarification && (
+        <div className="glass-card" style={{ padding: 18 }}>
+          <p style={{ margin: "0 0 12px", color: "#fff", lineHeight: 1.55 }}>{clarification.message}</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+            {clarification.areaSuggestions.map((a) => (
+              <button
+                key={a}
+                onClick={() => handleAreaPick(a)}
+                className="neon-btn-ghost"
+                style={{
+                  fontSize: 13, padding: "8px 14px", minHeight: 36, whiteSpace: "nowrap",
+                  borderColor: "rgba(0,245,255,0.5)", color: "var(--neon-cyan)",
+                }}
+              >
+                📍 {a}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* LOADING */}
       {loading && (
         <div className="glass-card" style={{ padding: 30, textAlign: "center" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10, fontSize: 18, fontWeight: 700, color: "var(--neon-pink)", animation: "pulseNeon 1.6s ease-in-out infinite", textShadow: "0 0 16px rgba(255,45,120,0.42)" }}>
@@ -128,11 +336,12 @@ export default function ItineraryBuilder() {
             GoaNow AI is crafting your plan
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 12 }}>
-            This usually takes 8-15 seconds
+            Checking live places + crowd intel... usually 10–20 seconds
           </div>
         </div>
       )}
 
+      {/* RESULT */}
       {result && (
         <div ref={resultRef} className="glass-card" style={{ padding: 22 }}>
           <h3 style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 14px", fontSize: 22, color: "var(--neon-cyan)", textShadow: "0 0 12px rgba(51,214,200,0.32)" }}>
@@ -142,15 +351,86 @@ export default function ItineraryBuilder() {
           <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
             {result}
           </div>
-          <div className="card-actions" style={{ marginTop: 20 }}>
+
+          {dataBadge && (
+            <div style={{ color: dataBadge.color, fontSize: 12, marginTop: 16, textAlign: "center" }}>
+              {dataBadge.text}
+            </div>
+          )}
+
+          {meta?.budgetMissing && !budgetTipDismissed && (
+            <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(0,245,255,0.05)", border: "1px solid rgba(0,245,255,0.2)", borderRadius: 10, fontSize: 13, color: "var(--text-muted)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <span>💡 Add your budget next time for a more accurate cost breakdown</span>
+              <button onClick={() => setBudgetTipDismissed(true)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16, padding: 4 }}>×</button>
+            </div>
+          )}
+
+          <div className="card-actions" style={{ marginTop: 18, flexWrap: "wrap" }}>
             <button onClick={handleCopy} className="neon-btn mobile-full" style={{ flex: 1, minWidth: 140 }}>
               <Icon name="card" size={17} />
               Copy Plan
             </button>
+            {!shareId ? (
+              <button onClick={handleSavePlan} disabled={saving} className="neon-btn-ghost mobile-full" style={{ flex: 1, minWidth: 140, borderColor: "rgba(255,215,0,0.5)", color: "#FFD93D" }}>
+                <Icon name="card" size={17} />
+                {saving ? "Saving..." : "💾 Save This Plan"}
+              </button>
+            ) : (
+              <button onClick={handleSharePlan} className="neon-btn-ghost mobile-full" style={{ flex: 1, minWidth: 140, borderColor: "rgba(0,245,255,0.5)", color: "var(--neon-cyan)" }}>
+                <Icon name="card" size={17} />
+                📤 Share Plan
+              </button>
+            )}
             <button onClick={handleReset} className="neon-btn-ghost mobile-full" style={{ flex: 1, minWidth: 140 }}>
               <Icon name="refresh" size={17} />
               Build Another
             </button>
+          </div>
+
+          {/* Thumbs */}
+          {shareId && (
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              {thanked ? (
+                <span style={{ color: "var(--text-muted)", fontSize: 13 }}>Thanks for the feedback! 🙏</span>
+              ) : (
+                <>
+                  <span style={{ color: "var(--text-muted)", fontSize: 13, marginRight: 10 }}>Was this plan helpful?</span>
+                  <button onClick={() => handleRate("up")} className="neon-btn-ghost" style={{ padding: "4px 12px", minHeight: 32, fontSize: 16, marginRight: 6 }}>👍</button>
+                  <button onClick={() => handleRate("down")} className="neon-btn-ghost" style={{ padding: "4px 12px", minHeight: 32, fontSize: 16 }}>👎</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* LIMIT MODAL */}
+      {limitModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setLimitModal(null); }}
+        >
+          <div className="glass-card" style={{ maxWidth: 480, padding: 28, textAlign: "center" }}>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
+            <h3 style={{ margin: "0 0 12px", color: "var(--neon-pink)", fontSize: 26 }}>You've used all 3 itinerary builds</h3>
+            <p style={{ color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.5 }}>
+              {limitModal.message}
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              {result && !shareId && (
+                <button onClick={() => { handleSavePlan(); setLimitModal(null); }} className="neon-btn">
+                  💾 Save My Plan
+                </button>
+              )}
+              {shareId && (
+                <button onClick={() => { handleSharePlan(); setLimitModal(null); }} className="neon-btn">
+                  📤 Share GoaNow
+                </button>
+              )}
+              <button onClick={() => setLimitModal(null)} className="neon-btn-ghost">Close</button>
+            </div>
           </div>
         </div>
       )}
