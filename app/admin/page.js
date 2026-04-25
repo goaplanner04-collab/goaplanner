@@ -439,18 +439,23 @@ function AdminDashboard({ onLogout }) {
     setSettingsLoading(false);
   };
 
-  const saveSettings = async () => {
+  const saveSettings = async (options = {}) => {
+    const targetPricing = options.pricing || pricing;
+    const targetTrialKeys = options.trialKeys || trialKeys;
+    const successMessage = options.successMessage || "Settings saved ✅";
+
     setSettingsSaving(true);
     try {
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ pricing, trial_keys: trialKeys }),
+        body: JSON.stringify({ pricing: targetPricing, trial_keys: targetTrialKeys }),
       });
       const data = await res.json();
       if (data.success) {
-        showToast("Settings saved ✅");
+        showToast(successMessage);
         setDbStatus("ok");
+        return true;
       } else if (data.setup_required) {
         setDbStatus("table_missing");
         showToast("Settings table missing in Supabase — see setup instructions below");
@@ -458,15 +463,24 @@ function AdminDashboard({ onLogout }) {
         showToast(data.error || "Save failed");
       }
     } catch { showToast("Save failed"); }
-    setSettingsSaving(false);
+    finally { setSettingsSaving(false); }
+    return false;
   };
 
-  const addTrialKey = () => {
+  const addTrialKey = async () => {
     if (!newKey.code.trim()) { showToast("Enter a key code"); return; }
     const code = newKey.code.trim().toUpperCase();
-    if (trialKeys.find((k) => k.code === code)) { showToast("Key already exists"); return; }
-    setTrialKeys((prev) => [...prev, { ...newKey, code, used_count: 0 }]);
+    if (trialKeys.find((k) => String(k.code || "").trim().toUpperCase() === code)) { showToast("Key already exists"); return; }
+
+    const nextKey = { ...newKey, code, used_count: 0 };
+    const nextTrialKeys = [...trialKeys, nextKey];
+    setTrialKeys(nextTrialKeys);
     setNewKey({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
+
+    await saveSettings({
+      trialKeys: nextTrialKeys,
+      successMessage: "Trial key added and saved ✅",
+    });
   };
 
   const removeTrialKey = (code) => setTrialKeys((prev) => prev.filter((k) => k.code !== code));
@@ -618,8 +632,8 @@ CREATE POLICY "Service full access" ON settings FOR ALL
                     Max Uses
                     <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={newKey.max_uses} onChange={(e) => setNewKey((k) => ({ ...k, max_uses: parseInt(e.target.value) || 1 }))} />
                   </label>
-                  <button type="button" onClick={addTrialKey} className="neon-btn-ghost" style={{ padding: "10px 14px", alignSelf: "end" }}>
-                    ➕ Add
+                  <button type="button" onClick={addTrialKey} disabled={settingsSaving} className="neon-btn-ghost" style={{ padding: "10px 14px", alignSelf: "end" }}>
+                    {settingsSaving ? "Saving..." : "➕ Add"}
                   </button>
                 </div>
 

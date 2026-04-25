@@ -279,7 +279,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
             <form onSubmit={handleTrialSubmit} style={{ marginTop: 12, display: "flex", gap: 8 }}>
               <input
                 value={trialCode}
-                onChange={(e) => { setTrialCode(e.target.value); setTrialError(null); }}
+                onChange={(e) => { setTrialCode(e.target.value.toUpperCase()); setTrialError(null); }}
                 placeholder="Enter trial key (e.g. GOA2024)"
                 className="input-field"
                 style={{ flex: 1, textTransform: "uppercase", letterSpacing: "0.1em" }}

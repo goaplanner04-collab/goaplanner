@@ -76,6 +76,9 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 
 # Admin panel
 ADMIN_PASSWORD=choose_a_strong_password_here
+
+# Optional trial keys, comma separated as CODE:HOURS
+TRIAL_KEYS=GOA2024:168,PRESS:72
 ```
 
 > **Never** commit `.env.local`. Only the `NEXT_PUBLIC_*` keys are exposed
@@ -168,18 +171,21 @@ CREATE INDEX events_publish_on_idx ON events (publish_on);
 URL: `/admin`
 
 1. Log in with `ADMIN_PASSWORD`.
-2. **Add Tonight's Party** form on the left:
+2. **Settings & Pricing** lets you add trial keys. Click **Add** to save a
+   key immediately, or use `TRIAL_KEYS=CODE:HOURS` in Railway variables for
+   simple env-based keys.
+3. **Add Tonight's Party** form on the left:
    - Required: Event Name, Venue, Area, Date, Start Time
    - `Publish On` — set a future date to schedule (the public feed
      filters `publish_on <= today`)
    - Leave `Entry Fee` blank to display *Entry TBC*
-3. **Got a flyer?** — drop an Instagram-story screenshot, click
+4. **Got a flyer?** — drop an Instagram-story screenshot, click
    *Extract with AI*. Claude vision parses the flyer and fills the
    form; ✨AI badges mark every auto-filled field. Edit anything before
    submitting.
-4. Right panel lists today's events; toggle **Show last 7 days** to
+5. Right panel lists today's events; toggle **Show last 7 days** to
    see history. Edit / delete inline.
-5. Bulk upload is available via `POST /api/admin/bulk-upload` (JSON
+6. Bulk upload is available via `POST /api/admin/bulk-upload` (JSON
    array of events, header `x-admin-auth: <ADMIN_PASSWORD>`).
 
 ---
