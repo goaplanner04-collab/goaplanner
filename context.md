@@ -42,7 +42,17 @@ ANTHROPIC_API_KEY=
 ADMIN_PASSWORD=
 
 TRIAL_KEYS=GOA2024:168,PRESS:72
+
+# Google Places + Geocoding (server-side only — never expose to browser)
+GOOGLE_PLACES_API_KEY=
 ```
+
+`GOOGLE_PLACES_API_KEY` setup:
+1. console.cloud.google.com → New project "GoaNow"
+2. Enable: **Places API** + **Geocoding API**
+3. Credentials → Create API Key
+4. Restrict to those two APIs only
+5. Google's $200/month free credit is sufficient for thousands of requests
 
 `TRIAL_KEYS` is optional and uses `CODE:HOURS` pairs. Public browser-exposed variables are only the `NEXT_PUBLIC_*` values.
 
@@ -92,6 +102,61 @@ Main event routes:
 - `/api/admin/events/[id]`: updates or deletes an event, requires admin header.
 - `/api/admin/bulk-upload`: accepts an array of events or `{ events: [...] }`, sanitizes fields, and upserts to Supabase.
 
+Additional Supabase tables (run these SQL statements):
+
+```sql
+-- Crowd intel cache (Reddit + Haiku output)
+CREATE TABLE IF NOT EXISTS crowd_intel (
+  place_id TEXT PRIMARY KEY,
+  place_name TEXT,
+  area TEXT,
+  best_time TEXT,
+  peak_crowd_time TEXT,
+  avg_price_per_person INTEGER,
+  price_range JSONB,
+  common_complaints JSONB,
+  insider_tips JSONB,
+  data_quality TEXT,
+  post_count INTEGER,
+  cached_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Saved/shared itineraries
+CREATE TABLE IF NOT EXISTS saved_itineraries (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  share_id TEXT UNIQUE NOT NULL,
+  itinerary_text TEXT NOT NULL,
+  user_area TEXT,
+  user_budget INTEGER,
+  duration_days INTEGER,
+  group_type TEXT,
+  language TEXT DEFAULT 'en',
+  data_source TEXT,
+  places_checked INTEGER,
+  reddit_sourced INTEGER,
+  thumbs_up INTEGER DEFAULT 0,
+  thumbs_down INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Per-user analytics + itinerary build counter
+CREATE TABLE IF NOT EXISTS analytics (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  area TEXT,
+  language TEXT,
+  plan INTEGER,
+  data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Event image columns
+ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS image_source TEXT;
+
+-- Supabase Storage: create bucket "event-images", set PUBLIC.
+```
+
 Expected `events` table fields:
 
 ```sql
@@ -135,11 +200,48 @@ Trial keys in Supabase track `code`, `label`, `duration_hours`, `max_uses`, and 
 
 ## AI Features
 
-- `/api/itinerary`: uses `claude-sonnet-4-20250514` with a long Goa-specific system prompt and returns `itinerary` text.
+- `/api/itinerary`: language-detected, area-clarifying, build-limited (3/pass) itinerary generator. Pulls live Google Places + Reddit crowd intel, then `claude-sonnet-4-20250514` builds the day-by-day plan.
 - `/api/admin/extract-flyer`: uses `claude-sonnet-4-20250514` vision to extract event fields from an uploaded flyer image.
 - `/api/admin/scrape-district`: fetches or accepts pasted District.in content and uses `claude-haiku-4-5-20251001` to extract Goa events.
+- `/api/places`: server-side Google Places proxy with category-aware search, photo carousel data, quality filter (rating >= 4.0, reviews >= 50), avg-price extraction via Haiku, 15-minute in-memory cache, graceful fallback to `lib/spotsData.js`.
+- `/api/crowd-intel`: Reddit search → Haiku analysis → Supabase 24h cache. Returns best time, peak crowd, avg price, complaints, insider tips.
 
 All AI routes require `ANTHROPIC_API_KEY`. Admin AI routes also require the admin auth header.
+
+## Live Data Pipeline
+
+The dashboard's "Nearby" tab and the itinerary builder both depend on this data flow:
+
+```
+User location/area
+   ↓
+/api/places (Google Places + quality filter + Haiku price extraction + haversine sort)
+   ↓
+/api/crowd-intel (Reddit r/goaindia + r/india + Haiku analysis)
+   ↓
+Enriched place objects with: rating, openNow, photos, avgPricePerPerson,
+bestTimeToVisit, peakCrowdTime, insiderTips
+   ↓
+Either rendered as SpotCards, or fed into Sonnet for itinerary generation
+```
+
+If Google Places fails, `/api/places` retries once then falls back to `lib/spotsData.js` and sets `X-Data-Source: fallback`. The itinerary builder receives the same fallback signal and labels its output accordingly.
+
+## Saved & Shared Plans
+
+- `/api/save-itinerary`: stores itinerary text + metadata to Supabase, returns 8-char `share_id`.
+- `/api/rate-itinerary`: thumbs up/down feedback per `share_id`.
+- `/app/plan/[shareId]/page.js`: public view of a shared plan with OG meta for social previews. No auth required — these pages are organic marketing.
+
+Frontend stores `share_id`s in `localStorage.goanow_saved_plans`.
+
+## Itinerary Build Limit
+
+Each pass allows 3 itinerary builds. Tracked via `analytics` table where `event_type = 'itinerary_built'` and `data->>'session_id' = sessionId`. The frontend gets `buildsRemaining` on every response and shows a save/share modal when it hits 0.
+
+## Analytics
+
+`/api/analytics` accepts `{ event_type, area, language, plan, data }` from the frontend. Events tracked: `itinerary_built`, `plan_saved`, `plan_shared`, `thumbs_up`, `thumbs_down`, `tab_viewed`, `paywall_opened`, `payment_success`. The admin panel's Analytics tab queries this table for stat cards (no charts).
 
 ## Admin Panel
 
