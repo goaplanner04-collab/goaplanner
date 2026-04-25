@@ -439,10 +439,33 @@ function AdminDashboard({ onLogout }) {
     setSettingsLoading(false);
   };
 
+  const normalizeTrialCode = (value) => String(value || "").trim().toUpperCase();
+  const resetNewKey = () => setNewKey({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
+  const hasTrialKey = (keys, code) => keys.some((k) => normalizeTrialCode(k.code) === code);
+  const buildPendingTrialKey = () => {
+    const code = normalizeTrialCode(newKey.code);
+    if (!code) return null;
+    return { ...newKey, code, used_count: 0 };
+  };
+
   const saveSettings = async (options = {}) => {
     const targetPricing = options.pricing || pricing;
-    const targetTrialKeys = options.trialKeys || trialKeys;
-    const successMessage = options.successMessage || "Settings saved ✅";
+    const hasExplicitTrialKeys = Object.prototype.hasOwnProperty.call(options, "trialKeys");
+    let targetTrialKeys = hasExplicitTrialKeys ? options.trialKeys : trialKeys;
+    let pendingKey = null;
+
+    if (!hasExplicitTrialKeys) {
+      pendingKey = buildPendingTrialKey();
+      if (pendingKey) {
+        if (hasTrialKey(targetTrialKeys, pendingKey.code)) {
+          showToast("Key already exists");
+          return false;
+        }
+        targetTrialKeys = [...targetTrialKeys, pendingKey];
+      }
+    }
+
+    const successMessage = options.successMessage || (pendingKey ? "Trial key added and settings saved ✅" : "Settings saved ✅");
 
     setSettingsSaving(true);
     try {
@@ -455,6 +478,10 @@ function AdminDashboard({ onLogout }) {
       if (data.success) {
         showToast(successMessage);
         setDbStatus("ok");
+        if (pendingKey) {
+          setTrialKeys(targetTrialKeys);
+          resetNewKey();
+        }
         return true;
       } else if (data.setup_required) {
         setDbStatus("table_missing");
@@ -468,14 +495,13 @@ function AdminDashboard({ onLogout }) {
   };
 
   const addTrialKey = async () => {
-    if (!newKey.code.trim()) { showToast("Enter a key code"); return; }
-    const code = newKey.code.trim().toUpperCase();
-    if (trialKeys.find((k) => String(k.code || "").trim().toUpperCase() === code)) { showToast("Key already exists"); return; }
+    const nextKey = buildPendingTrialKey();
+    if (!nextKey) { showToast("Enter a key code"); return; }
+    if (hasTrialKey(trialKeys, nextKey.code)) { showToast("Key already exists"); return; }
 
-    const nextKey = { ...newKey, code, used_count: 0 };
     const nextTrialKeys = [...trialKeys, nextKey];
     setTrialKeys(nextTrialKeys);
-    setNewKey({ code: "", label: "Trial Pass", duration_hours: 168, max_uses: 1 });
+    resetNewKey();
 
     await saveSettings({
       trialKeys: nextTrialKeys,
@@ -615,24 +641,24 @@ CREATE POLICY "Service full access" ON settings FOR ALL
                 </div>
 
                 {/* Add new key */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 80px auto", gap: 8, alignItems: "end", marginBottom: 16, flexWrap: "wrap" }}>
-                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "end", marginBottom: 16 }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 0 }}>
                     Key Code
                     <input className="input-field" style={{ marginTop: 4, textTransform: "uppercase", letterSpacing: "0.1em" }} placeholder="GOA2024" value={newKey.code} onChange={(e) => setNewKey((k) => ({ ...k, code: e.target.value.toUpperCase() }))} />
                   </label>
-                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 0 }}>
                     Label
                     <input className="input-field" style={{ marginTop: 4 }} placeholder="Trial Pass" value={newKey.label} onChange={(e) => setNewKey((k) => ({ ...k, label: e.target.value }))} />
                   </label>
-                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 0 }}>
                     Hours
                     <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={newKey.duration_hours} onChange={(e) => setNewKey((k) => ({ ...k, duration_hours: parseInt(e.target.value) || 168 }))} />
                   </label>
-                  <label style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 0 }}>
                     Max Uses
                     <input type="number" min="1" className="input-field" style={{ marginTop: 4 }} value={newKey.max_uses} onChange={(e) => setNewKey((k) => ({ ...k, max_uses: parseInt(e.target.value) || 1 }))} />
                   </label>
-                  <button type="button" onClick={addTrialKey} disabled={settingsSaving} className="neon-btn-ghost" style={{ padding: "10px 14px", alignSelf: "end" }}>
+                  <button type="button" onClick={addTrialKey} disabled={settingsSaving} className="neon-btn-ghost" style={{ padding: "10px 14px", alignSelf: "end", width: "100%" }}>
                     {settingsSaving ? "Saving..." : "➕ Add"}
                   </button>
                 </div>
@@ -675,7 +701,7 @@ CREATE POLICY "Service full access" ON settings FOR ALL
                 )}
               </div>
 
-              <button type="button" onClick={saveSettings} disabled={settingsSaving} className="neon-btn" style={{ alignSelf: "flex-start", minWidth: 180 }}>
+              <button type="button" onClick={() => saveSettings()} disabled={settingsSaving} className="neon-btn" style={{ alignSelf: "flex-start", minWidth: 180 }}>
                 {settingsSaving ? "Saving..." : "💾 Save All Settings"}
               </button>
             </>
