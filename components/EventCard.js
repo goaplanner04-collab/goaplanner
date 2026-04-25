@@ -1,11 +1,11 @@
 "use client";
 
+import Icon from "@/components/Icon";
 import { formatDistance } from "@/lib/haversine";
 
 function parseStartTime(s) {
   if (!s) return null;
   const str = String(s).trim().toLowerCase();
-  // Handle "10 PM", "10pm", "9:30 pm", "Sunset", etc.
   const m = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
   if (!m) return null;
   let h = parseInt(m[1], 10);
@@ -13,7 +13,7 @@ function parseStartTime(s) {
   const ap = m[3];
   if (ap === "pm" && h < 12) h += 12;
   if (ap === "am" && h === 12) h = 0;
-  if (!ap && h < 7) h += 12; // assume afternoon if ambiguous low number
+  if (!ap && h < 7) h += 12;
   return { h, min };
 }
 
@@ -24,6 +24,10 @@ function formatHour12(h, min) {
   return `${hour12}${mStr} ${finalAmPm}`;
 }
 
+function cleanFee(value) {
+  return String(value || "").replace(/\u00e2\u201a\u00b9/g, "Rs ");
+}
+
 export default function EventCard({ event, distanceKm }) {
   const parsed = parseStartTime(event.start_time);
 
@@ -32,46 +36,33 @@ export default function EventCard({ event, distanceKm }) {
     if (parsed.h >= 21 && parsed.h <= 23) {
       const newH = (parsed.h + 2) % 24;
       timingNote = (
-        <div
-          style={{
-            color: "var(--neon-cyan)",
-            fontSize: 12,
-            marginTop: 6,
-            opacity: 0.9
-          }}
-        >
-          🕐 Crowd arrives around {formatHour12(newH, parsed.min)} — don't show up before then
+        <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--neon-cyan)", fontSize: 12, marginTop: 2 }}>
+          <Icon name="clock" size={14} />
+          Crowd arrives around {formatHour12(newH, parsed.min)}
         </div>
       );
     } else if (parsed.h === 0 || parsed.h === 24 || (parsed.h >= 0 && parsed.h < 5)) {
       timingNote = (
-        <div
-          style={{
-            color: "var(--neon-gold)",
-            fontSize: 12,
-            marginTop: 6
-          }}
-        >
-          🔥 Late night — this one goes till sunrise
+        <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--neon-gold)", fontSize: 12, marginTop: 2 }}>
+          <Icon name="sun" size={14} />
+          Late night set that runs close to sunrise
         </div>
       );
     }
   }
 
-  // Entry fee badge
+  const fee = cleanFee(event.entry_fee).trim();
   let entryBadge;
-  const fee = (event.entry_fee || "").trim();
   if (!fee || fee.toLowerCase() === "check at venue") {
     entryBadge = <span className="badge badge-grey">Entry TBC</span>;
   } else if (fee.toLowerCase() === "free") {
     entryBadge = <span className="badge badge-green">Free Entry</span>;
-  } else if (fee.includes("₹")) {
+  } else if (fee.toLowerCase().includes("rs")) {
     entryBadge = <span className="badge badge-gold">{fee}</span>;
   } else {
     entryBadge = <span className="badge badge-grey">{fee}</span>;
   }
 
-  // Status badge
   let statusBadge = null;
   if (event.status === "happening_now") {
     statusBadge = (
@@ -88,7 +79,12 @@ export default function EventCard({ event, distanceKm }) {
       </span>
     );
   } else if (event.status === "tonight") {
-    statusBadge = <span className="badge badge-blue">🌙 Tonight</span>;
+    statusBadge = (
+      <span className="badge badge-blue">
+        <Icon name="music" size={14} />
+        Tonight
+      </span>
+    );
   }
 
   const mapsUrl = event.lat && event.lng
@@ -98,46 +94,51 @@ export default function EventCard({ event, distanceKm }) {
       )}`;
 
   return (
-    <div className="glass-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 10 }}>
+    <div className="glass-card event-card">
+      <div className="card-header-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3
             style={{
               margin: 0,
               fontFamily: "'Bebas Neue'",
-              fontSize: 26,
-              letterSpacing: "0.03em",
+              fontSize: 28,
               color: "var(--neon-pink)",
-              textShadow: "0 0 12px rgba(255,45,120,0.35)",
-              lineHeight: 1.15
+              textShadow: "0 0 12px rgba(255,45,120,0.28)",
+              lineHeight: 1.05,
             }}
           >
             {event.name}
           </h3>
-          <div style={{ color: "#fff", fontSize: 14, marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#fff", fontSize: 14, marginTop: 6, flexWrap: "wrap" }}>
+            <Icon name="map-pin" size={14} style={{ color: "var(--neon-cyan)" }} />
             {event.venue}
-            <span style={{ color: "var(--text-muted)" }}> · {event.area}</span>
+            <span style={{ color: "var(--text-muted)" }}>{event.area}</span>
           </div>
           {distanceKm != null && (
-            <div style={{ color: "var(--neon-cyan)", fontSize: 12, marginTop: 4 }}>
-              📍 {formatDistance(distanceKm)} away
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--neon-cyan)", fontSize: 12, marginTop: 5 }}>
+              <Icon name="compass" size={14} />
+              {formatDistance(distanceKm)} away
             </div>
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           {statusBadge}
           <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "#fff", border: "1px solid var(--border-glass)" }}>
-            🕒 {event.start_time}
+            <Icon name="clock" size={14} />
+            {event.start_time}
           </span>
         </div>
       </div>
 
       {timingNote}
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="card-meta-row">
         {entryBadge}
         {event.vibe && (
-          <span className="badge badge-pink">🎵 {event.vibe}</span>
+          <span className="badge badge-pink">
+            <Icon name="music" size={14} />
+            {event.vibe}
+          </span>
         )}
       </div>
 
@@ -148,12 +149,13 @@ export default function EventCard({ event, distanceKm }) {
       )}
 
       {event.insider_tip && (
-        <div className="tip-box">
-          🗣️ <strong>GoaNow Insider:</strong> {event.insider_tip}
+        <div className="tip-box" style={{ display: "flex", gap: 8 }}>
+          <Icon name="sparkles" size={16} style={{ color: "var(--neon-gold)", marginTop: 2 }} />
+          <span><strong>GoaNow Insider:</strong> {event.insider_tip}</span>
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 4, flexWrap: "wrap" }}>
+      <div className="card-actions" style={{ justifyContent: "space-between" }}>
         {event.source && (
           <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
             via {event.source}
@@ -163,10 +165,11 @@ export default function EventCard({ event, distanceKm }) {
           href={mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="neon-btn"
+          className="neon-btn mobile-full"
           style={{ padding: "8px 14px", fontSize: 13, marginLeft: "auto" }}
         >
-          Get Directions →
+          <Icon name="directions" size={16} />
+          Directions
         </a>
       </div>
     </div>

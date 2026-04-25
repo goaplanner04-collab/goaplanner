@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import Icon from "@/components/Icon";
 import CategoryFilter from "@/components/CategoryFilter";
 import SpotCard from "@/components/SpotCard";
 import EventCard from "@/components/EventCard";
@@ -13,9 +14,9 @@ import { spots } from "@/lib/spotsData";
 import { getDistanceKm } from "@/lib/haversine";
 
 const TABS = [
-  { key: "nearby", label: "📍 Nearby", short: "Nearby" },
-  { key: "events", label: "🎉 Parties", short: "Parties" },
-  { key: "ai", label: "🗺️ AI Plan", short: "AI Plan" }
+  { key: "nearby", label: "Nearby", icon: "map-pin" },
+  { key: "events", label: "Parties", icon: "music" },
+  { key: "ai", label: "AI Plan", icon: "route" },
 ];
 
 const GOA_CENTER = { lat: 15.2993, lng: 74.1240 };
@@ -36,7 +37,7 @@ const AREAS_FALLBACK = {
   palolem: { lat: 15.0100, lng: 74.0230 },
   cavelossim: { lat: 15.1824, lng: 73.9478 },
   assagao: { lat: 15.5891, lng: 73.7629 },
-  ashvem: { lat: 15.6531, lng: 73.7128 }
+  ashvem: { lat: 15.6531, lng: 73.7128 },
 };
 
 export default function DashboardPage() {
@@ -76,63 +77,32 @@ export default function DashboardPage() {
     <main style={{ minHeight: "100vh", paddingBottom: 100 }}>
       <Navbar showPlanBadge />
 
-      {/* Tabs */}
       <nav
         style={{
           position: "sticky",
           top: 60,
           zIndex: 40,
-          background: "rgba(10, 10, 15, 0.85)",
+          background: "rgba(7, 9, 14, 0.88)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
-          borderBottom: "1px solid var(--border-glass)"
+          borderBottom: "1px solid var(--border-glass)",
         }}
       >
-        <div
-          style={{
-            maxWidth: 800,
-            margin: "0 auto",
-            padding: "10px 20px",
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 8
-          }}
-        >
-          {TABS.map((t) => (
+        <div className="dashboard-tabs">
+          {TABS.map((item) => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              style={{
-                background: tab === t.key
-                  ? "linear-gradient(135deg, rgba(255,45,120,0.2), rgba(255,45,120,0.06))"
-                  : "transparent",
-                border: tab === t.key
-                  ? "1px solid var(--neon-pink)"
-                  : "1px solid var(--border-glass)",
-                color: tab === t.key ? "#fff" : "var(--text-muted)",
-                padding: "10px 8px",
-                borderRadius: 12,
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-                transition: "all 0.2s ease",
-                boxShadow: tab === t.key ? "0 0 16px rgba(255,45,120,0.3)" : "none"
-              }}
+              key={item.key}
+              onClick={() => setTab(item.key)}
+              className={"dashboard-tab" + (tab === item.key ? " active" : "")}
             >
-              {t.label}
+              <Icon name={item.icon} size={17} />
+              {item.label}
             </button>
           ))}
         </div>
       </nav>
 
-      <div
-        style={{
-          maxWidth: 800,
-          margin: "0 auto",
-          padding: "20px 16px"
-        }}
-        className="animate-fadeUp"
-      >
+      <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 14px" }} className="animate-fadeUp">
         {tab === "nearby" && <NearbyTab />}
         {tab === "events" && <EventsTab />}
         {tab === "ai" && <ItineraryBuilder />}
@@ -143,15 +113,12 @@ export default function DashboardPage() {
   );
 }
 
-// ===========================
-// Nearby tab
-// ===========================
 function NearbyTab() {
   const [coords, setCoords] = useState(null);
-  const [locStatus, setLocStatus] = useState("loading"); // loading | ok | denied | manual
+  const [locStatus, setLocStatus] = useState("loading");
   const [areaInput, setAreaInput] = useState("");
   const [category, setCategory] = useState("all");
-  const [sortMode, setSortMode] = useState("distance"); // distance | rating
+  const [sortMode, setSortMode] = useState("distance");
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -173,39 +140,24 @@ function NearbyTab() {
     e.preventDefault();
     const key = areaInput.trim().toLowerCase();
     if (!key) return;
-    const match = AREAS_FALLBACK[key];
-    if (match) {
-      setCoords(match);
-      setLocStatus("manual");
-    } else {
-      // fall back to Goa center if area is not in our small list
-      setCoords(GOA_CENTER);
-      setLocStatus("manual");
-    }
-  };
-
-  const useCenterFallback = () => {
-    setCoords(GOA_CENTER);
+    setCoords(AREAS_FALLBACK[key] || GOA_CENTER);
     setLocStatus("manual");
   };
 
-  const userLat = coords ? coords.lat : null;
-  const userLng = coords ? coords.lng : null;
-
   const list = useMemo(() => {
     let arr = spots.slice();
-    if (category !== "all") arr = arr.filter((s) => s.category === category);
-    arr = arr.map((s) => ({
-      ...s,
-      distance: userLat != null ? getDistanceKm(userLat, userLng, s.lat, s.lng) : null
+    if (category !== "all") arr = arr.filter((spot) => spot.category === category);
+    arr = arr.map((spot) => ({
+      ...spot,
+      distance: coords ? getDistanceKm(coords.lat, coords.lng, spot.lat, spot.lng) : null,
     }));
-    if (sortMode === "distance" && userLat != null) {
+    if (sortMode === "distance" && coords) {
       arr.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     } else {
       arr.sort((a, b) => b.rating - a.rating);
     }
     return arr;
-  }, [category, userLat, userLng, sortMode]);
+  }, [category, coords, sortMode]);
 
   if (locStatus === "loading") {
     return <PulsingDotLoader text="Finding spots near you..." />;
@@ -215,28 +167,33 @@ function NearbyTab() {
     <div>
       {locStatus === "denied" && !coords && (
         <div className="glass-card" style={{ padding: 18, marginBottom: 16 }}>
-          <div style={{ color: "#fff", fontSize: 14, marginBottom: 10 }}>
-            📍 We couldn't access your location.
+          <div style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff", fontSize: 14, marginBottom: 10 }}>
+            <Icon name="map-pin" size={17} style={{ color: "var(--neon-cyan)" }} />
+            We could not access your location.
           </div>
           <form onSubmit={handleAreaSubmit} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input
               value={areaInput}
               onChange={(e) => setAreaInput(e.target.value)}
-              placeholder="Enter your area in Goa (e.g. Morjim, Calangute)"
+              placeholder="Enter your area in Goa, e.g. Morjim"
               className="input-field"
               style={{ flex: 1, minWidth: 200 }}
             />
-            <button type="submit" className="neon-btn" style={{ padding: "10px 16px" }}>
+            <button type="submit" className="neon-btn mobile-full" style={{ padding: "10px 16px" }}>
+              <Icon name="compass" size={17} />
               Find Spots
             </button>
           </form>
           <button
             type="button"
-            onClick={useCenterFallback}
-            className="neon-btn-ghost"
-            style={{ marginTop: 10, fontSize: 12, padding: "6px 12px", minHeight: 32 }}
+            onClick={() => {
+              setCoords(GOA_CENTER);
+              setLocStatus("manual");
+            }}
+            className="neon-btn-ghost mobile-full"
+            style={{ marginTop: 10, fontSize: 12, padding: "6px 12px", minHeight: 34 }}
           >
-            Or just show me everything in Goa
+            Show all Goa
           </button>
         </div>
       )}
@@ -247,8 +204,9 @@ function NearbyTab() {
         </div>
       )}
       {locStatus === "ok" && (
-        <div style={{ color: "var(--neon-cyan)", fontSize: 12, marginBottom: 8 }}>
-          📍 Showing results closest to your live location
+        <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--neon-cyan)", fontSize: 12, marginBottom: 8 }}>
+          <Icon name="map-pin" size={14} />
+          Showing results closest to your live location
         </div>
       )}
 
@@ -256,11 +214,12 @@ function NearbyTab() {
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
         <button
-          onClick={() => setSortMode((m) => (m === "distance" ? "rating" : "distance"))}
+          onClick={() => setSortMode((mode) => (mode === "distance" ? "rating" : "distance"))}
           className="category-pill"
-          style={{ background: "rgba(0,245,255,0.08)", borderColor: "rgba(0,245,255,0.3)", color: "var(--neon-cyan)" }}
+          style={{ background: "rgba(51,214,200,0.08)", borderColor: "rgba(51,214,200,0.3)", color: "var(--neon-cyan)" }}
         >
-          {sortMode === "distance" ? "📍 Nearest First" : "⭐ Top Rated"}
+          <Icon name={sortMode === "distance" ? "map-pin" : "star"} size={15} />
+          {sortMode === "distance" ? "Nearest First" : "Top Rated"}
         </button>
       </div>
 
@@ -270,16 +229,13 @@ function NearbyTab() {
             No spots match this filter. Try another category.
           </div>
         ) : (
-          list.map((s) => <SpotCard key={s.id} spot={s} distanceKm={s.distance} />)
+          list.map((spot) => <SpotCard key={spot.id} spot={spot} distanceKm={spot.distance} />)
         )}
       </div>
     </div>
   );
 }
 
-// ===========================
-// Events tab
-// ===========================
 function EventsTab() {
   const [events, setEvents] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -305,7 +261,7 @@ function EventsTab() {
       const data = await res.json();
       setEvents(data.events || []);
       setUpdatedAt(new Date());
-    } catch (e) {
+    } catch {
       setError("Could not load events. Try again.");
     } finally {
       setLoading(false);
@@ -318,16 +274,7 @@ function EventsTab() {
 
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 12,
-          flexWrap: "wrap",
-          gap: 8
-        }}
-      >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
           {updatedAt
             ? `Last updated ${updatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
@@ -339,44 +286,27 @@ function EventsTab() {
           style={{ borderColor: "var(--neon-pink)", color: "var(--neon-pink)" }}
           disabled={loading}
         >
-          🔄 Refresh
+          <Icon name="refresh" size={15} />
+          Refresh
         </button>
       </div>
 
       {loading && <LoadingSkeleton count={4} height={210} />}
 
       {error && (
-        <div
-          style={{
-            padding: 16,
-            borderRadius: 12,
-            background: "rgba(239,68,68,0.08)",
-            border: "1px solid rgba(239,68,68,0.3)",
-            color: "#fca5a5",
-            fontSize: 14,
-            marginBottom: 12
-          }}
-        >
+        <div style={{ padding: 16, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5", fontSize: 14, marginBottom: 12 }}>
           {error}
         </div>
       )}
 
       {!loading && events && events.length === 0 && (
-        <div
-          className="glass-card"
-          style={{
-            padding: 36,
-            textAlign: "center",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            alignItems: "center"
-          }}
-        >
-          <div style={{ fontSize: 50 }}>🎉</div>
+        <div className="glass-card" style={{ padding: 36, textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+          <span className="icon-tile">
+            <Icon name="music" size={24} />
+          </span>
           <h3 style={{ margin: 0, fontSize: 24, color: "#fff" }}>No parties listed yet</h3>
           <div style={{ color: "var(--text-muted)", fontSize: 14 }}>
-            Check back after 6 PM — we update the feed daily
+            Check back after 6 PM. We update the feed daily.
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 6 }}>
             In the meantime, check Instagram:{" "}
@@ -389,11 +319,11 @@ function EventsTab() {
 
       {!loading && events && events.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {events.map((e) => {
-            const dist = coords && e.lat && e.lng
-              ? getDistanceKm(coords.lat, coords.lng, e.lat, e.lng)
+          {events.map((event) => {
+            const dist = coords && event.lat && event.lng
+              ? getDistanceKm(coords.lat, coords.lng, event.lat, event.lng)
               : null;
-            return <EventCard key={e.id} event={e} distanceKm={dist} />;
+            return <EventCard key={event.id} event={event} distanceKm={dist} />;
           })}
         </div>
       )}

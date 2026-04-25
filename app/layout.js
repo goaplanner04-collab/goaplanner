@@ -4,33 +4,33 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#0A0A0F",
+  themeColor: "#07090e",
 };
 
 export const metadata = {
-  title: "GoaNow 🔥 — Know what's happening in Goa. Right now.",
+  title: "GoaNow - Know what's happening in Goa right now",
   description:
-    "Nearby cafes, live party intel, AI-built Goa itineraries. Built for tourists. Only ₹99 for your whole trip.",
+    "Nearby cafes, live party intel, and AI-built Goa itineraries for travelers.",
   metadataBase: new URL("https://goanow.in"),
   openGraph: {
-    title: "GoaNow 🔥",
+    title: "GoaNow",
     description:
-      "Nearby cafes, tonight's parties, AI trip planner for Goa. ₹99 unlocks your whole trip.",
+      "Nearby cafes, tonight's parties, and an AI trip planner for Goa.",
     url: "https://goanow.in",
     siteName: "GoaNow",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
-        height: 630
-      }
+        height: 630,
+      },
     ],
     locale: "en_IN",
-    type: "website"
+    type: "website",
   },
   icons: {
-    icon: "/favicon.ico"
-  }
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }) {
