@@ -51,16 +51,43 @@ export default function LandingPage() {
       setAuthChecked(true);
       return;
     }
+
     let mounted = true;
-    sb.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setUser(data?.session?.user || null);
+    let resolved = false;
+
+    // If the URL contains OAuth tokens we're mid-redirect — wait longer
+    // before declaring "no session" because supabase-js detects them async.
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const hasOAuthFragment =
+      url.includes("access_token=") ||
+      url.includes("refresh_token=") ||
+      url.includes("?code=") ||
+      url.includes("&code=");
+
+    const finish = (u) => {
+      if (!mounted || resolved) return;
+      resolved = true;
+      setUser(u || null);
       setAuthChecked(true);
-    });
+    };
+
+    // Auth state changes (fires when OAuth tokens are processed)
     const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-      setAuthChecked(true);
+      if (session?.user) finish(session.user);
     });
+
+    // Cached session check
+    sb.auth.getSession().then(({ data }) => {
+      if (data?.session?.user) {
+        finish(data.session.user);
+        return;
+      }
+      // No cached session yet. If URL had OAuth tokens, wait for the listener.
+      // Otherwise give up after a short timeout.
+      const fallback = hasOAuthFragment ? 3000 : 600;
+      setTimeout(() => finish(null), fallback);
+    });
+
     return () => { mounted = false; subscription?.unsubscribe(); };
   }, []);
 
