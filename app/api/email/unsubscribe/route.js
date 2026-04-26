@@ -43,6 +43,6 @@ export async function GET(req) {
     "Unsubscribed",
     `<h1>You're unsubscribed ✓</h1>
      <p>You won't receive party-night emails from GoaNow anymore.</p>
-     <p>Changed your mind? <a href="${process.env.NEXT_PUBLIC_SITE_URL || "https://goanow.in"}">Visit GoaNow</a> and we'll add you back next time you book a pass.</p>`
+     <p>Changed your mind? <a href="${process.env.NEXT_PUBLIC_SITE_URL || "https://goanow.online"}">Visit GoaNow</a> and we'll add you back next time you book a pass.</p>`
   );
 }

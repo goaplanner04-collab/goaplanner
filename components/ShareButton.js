@@ -10,7 +10,7 @@ export default function ShareButton() {
     const data = {
       title: "GoaNow",
       text: "Nearby cafes, tonight's parties, and an AI trip planner for Goa.",
-      url: "https://goanow.in",
+      url: "https://goanow.online",
     };
 
     if (typeof navigator !== "undefined" && navigator.share) {

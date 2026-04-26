@@ -32,7 +32,7 @@ export async function generateMetadata({ params }) {
     openGraph: {
       title: "My Goa Plan — GoaNow 🔥",
       description: preview,
-      url: `https://goanow.in/plan/${params.shareId}`,
+      url: `https://goanow.online/plan/${params.shareId}`,
       siteName: "GoaNow",
       type: "article",
     },

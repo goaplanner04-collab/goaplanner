@@ -48,8 +48,8 @@ FOURSQUARE_API_KEY=
 
 # Resend transactional email (server-side only)
 RESEND_API_KEY=
-RESEND_FROM=GoaNow <hello@goanow.in>
-NEXT_PUBLIC_SITE_URL=https://goanow.in
+RESEND_FROM=GoaNow <hello@goanow.online>
+NEXT_PUBLIC_SITE_URL=https://goanow.online
 
 # Cron secret for /api/email/party-blast (used by Railway/external cron)
 CRON_SECRET=
@@ -291,7 +291,7 @@ CREATE POLICY "Service full access" ON email_subscribers FOR ALL
 
 To run the party blast on a schedule, set `CRON_SECRET` and call:
 ```
-POST https://goanow.in/api/email/party-blast
+POST https://goanow.online/api/email/party-blast
   Header: x-cron-secret: <CRON_SECRET>
 ```
 Daily at 6 PM IST is a sensible cadence — Railway cron, GitHub Actions, or cron-job.org all work.

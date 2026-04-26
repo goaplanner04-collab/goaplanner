@@ -11,12 +11,12 @@ export const metadata = {
   title: "GoaNow - Know what's happening in Goa right now",
   description:
     "Nearby cafes, live party intel, and AI-built Goa itineraries for travelers.",
-  metadataBase: new URL("https://goanow.in"),
+  metadataBase: new URL("https://goanow.online"),
   openGraph: {
     title: "GoaNow",
     description:
       "Nearby cafes, tonight's parties, and an AI trip planner for Goa.",
-    url: "https://goanow.in",
+    url: "https://goanow.online",
     siteName: "GoaNow",
     images: [
       {

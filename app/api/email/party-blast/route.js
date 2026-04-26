@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://goanow.in";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://goanow.online";
 
 function authorized(req) {
   // Either admin auth header OR a Cron secret (for Railway/Vercel cron jobs)
