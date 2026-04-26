@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isEmailValid, sendWelcomeEmail } from "@/lib/resend";
+import { grantPass } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export async function POST(req) {
     const customerEmail = (body.email || "").toString().trim().toLowerCase();
     const planName = body.planName ? String(body.planName).slice(0, 80) : null;
     const expiryAt = body.expiryAt ? new Date(body.expiryAt).toISOString() : null;
+    const durationMs = Number(body.durationMs) || 0;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json({ success: false, error: "Missing fields" }, { status: 400 });
@@ -33,16 +35,26 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: "Verification failed" }, { status: 400 });
     }
 
-    // Save subscriber + send welcome email (best-effort, never block success)
+    // Persist pass to user_passes (so it survives sign-out / new device)
+    let serverExpiryAt = expiryAt;
     if (isEmailValid(customerEmail)) {
       const supabase = getSupabaseAdmin();
       if (supabase) {
+        if (durationMs > 0) {
+          const granted = await grantPass(supabase, {
+            email: customerEmail,
+            planName,
+            durationMs,
+            source: "paid",
+          });
+          if (granted?.expiresAt) serverExpiryAt = granted.expiresAt;
+        }
         try {
           await supabase.from("email_subscribers").upsert(
             {
               email: customerEmail,
               plan_name: planName,
-              expiry_at: expiryAt,
+              expiry_at: serverExpiryAt,
               source: "paid",
               opted_out: false,
             },
@@ -52,16 +64,15 @@ export async function POST(req) {
           // ignore — table may not exist
         }
       }
-      // fire and forget welcome email — don't await blocks payment success
       sendWelcomeEmail({
         to: customerEmail,
         planName,
-        expiryAt,
+        expiryAt: serverExpiryAt,
         source: "paid",
       }).catch(() => {});
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, expiresAt: serverExpiryAt });
   } catch (err) {
     console.error("verify-payment error", err);
     return NextResponse.json({ success: false, error: "Verification failed" }, { status: 500 });

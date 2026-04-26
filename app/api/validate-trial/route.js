@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isEmailValid, sendWelcomeEmail } from "@/lib/resend";
+import { grantPass } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,10 +48,21 @@ export async function POST(req) {
     }
 
     const supabaseForEmail = getSupabaseAdmin();
-    const sendTrialWelcome = (planName, durationHours) => {
-      if (!isEmailValid(customerEmail)) return;
-      const expiryAt = new Date(Date.now() + durationHours * 3600 * 1000).toISOString();
+    const sendTrialWelcome = async (planName, durationHours) => {
+      if (!isEmailValid(customerEmail)) return null;
+      const durationMs = durationHours * 3600 * 1000;
+      let expiryAt = new Date(Date.now() + durationMs).toISOString();
+
       if (supabaseForEmail) {
+        // Persist pass server-side so trial survives sign-out / new device
+        const granted = await grantPass(supabaseForEmail, {
+          email: customerEmail,
+          planName,
+          durationMs,
+          source: "trial",
+        });
+        if (granted?.expiresAt) expiryAt = granted.expiresAt;
+
         supabaseForEmail.from("email_subscribers").upsert(
           {
             email: customerEmail,
@@ -68,6 +80,7 @@ export async function POST(req) {
         expiryAt,
         source: "trial",
       }).catch(() => {});
+      return expiryAt;
     };
 
     // 1. Check env var keys first (always works, no DB needed)

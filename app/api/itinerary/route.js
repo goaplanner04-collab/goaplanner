@@ -13,6 +13,12 @@ import {
   fsqOpenNow, fsqArea, fsqCoords, fsqGoogleMapsUrl,
   resolveGoaCoords, GOA_CENTER,
 } from "@/lib/foursquare";
+import {
+  getDailyBuildCount,
+  getBonusBuilds,
+  consumeBonusBuild,
+  normalizeEmail,
+} from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +26,7 @@ export const maxDuration = 60;
 
 const HAIKU = "claude-haiku-4-5-20251001";
 const SONNET = "claude-sonnet-4-20250514";
-const BUILD_LIMIT = 3;
+export const DAILY_BUILD_LIMIT = 15;
 
 const VAGUE_AREAS = new Set([
   "north goa", "south goa", "near beach", "near beaches",
@@ -45,28 +51,6 @@ function tryParseJsonObject(raw) {
     return JSON.parse(txt.slice(start, end + 1));
   } catch {
     return null;
-  }
-}
-
-async function detectLanguage(client, message) {
-  try {
-    const res = await client.messages.create({
-      model: HAIKU,
-      max_tokens: 8,
-      system: "Detect the language of this text. Return ONLY the ISO 639-1 code (e.g. 'en', 'hi', 'es'). No explanation, no punctuation.",
-      messages: [{ role: "user", content: message.slice(0, 600) }],
-    });
-    const code = (res.content || [])
-      .filter((c) => c.type === "text")
-      .map((c) => c.text)
-      .join("")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z]/g, "")
-      .slice(0, 2);
-    return code || "en";
-  } catch {
-    return "en";
   }
 }
 
@@ -266,26 +250,24 @@ async function buildEnrichedContext({ fsqKey, anthropicKey, supabase, area, lat,
   return { fetched, dataSource, placesChecked, redditSourced };
 }
 
-function buildSystemPrompt(detectedLanguage, enrichedContext) {
-  const langDirective = detectedLanguage === "en"
-    ? "Respond in English."
-    : detectedLanguage === "hi"
-    ? "Respond entirely in Hindi using Devanagari script. Keep place names in English."
-    : `Respond in ${detectedLanguage}. Keep place names in English.`;
+function buildSystemPrompt(enrichedContext) {
+  return `You are GoaNow AI — the world's best hyper-local Goa travel planner. You build personalized day-by-day itineraries using live, verified data.
 
-  return `You are GoaNow AI — hyper-local Goa travel expert building personalized itineraries with live data.
+LANGUAGE: Always respond in English. Do not translate place names.
 
-LANGUAGE: ${langDirective}
-
-ABSOLUTE RULES:
-1. ONLY recommend places from LIVE PLACES DATA below. Never invent.
-2. Use EXACT distances from data. Never guess or round significantly.
-3. NEVER recommend places where openNow is false.
-4. Sort every day by distanceKm — nearest first always.
-5. When bestTimeToVisit or peakCrowdTime exists for a place, weave it naturally.
-6. When avgPricePerPerson exists, use it for budget math.
-7. When insiderTips exist, present as 'locals say...' or 'pro tip:' — never say 'Reddit says'.
-8. Quality minimum: only recommend 4.0+ rated places.
+ABSOLUTE RULES (non-negotiable):
+1. ONLY recommend places from LIVE PLACES DATA below. Never invent a place name, address, or rating.
+2. **OPENING HOURS**: Only include a place if openNow === true OR openNow === null. If openNow === false, SKIP it entirely.
+3. **MATCH TIME OF DAY**: Match the place's typical hours to the time you slot it. Never put a brunch cafe at 11 PM or a nightclub at noon. If a place's category strongly contradicts the suggested time, drop it.
+4. **DISTANCES**: Use the EXACT distanceKm value from the data. Never round more than 0.1 km. Never guess.
+5. **NEAREST FIRST**: Within each day, sort stops by distanceKm ascending — minimise back-and-forth travel.
+6. **CROSS-VERIFY**: If two sources disagree (e.g. tip says "always packed", rating says 4.8), trust the higher-confidence source and surface the tip as a caveat.
+7. **PRICE MATH**: When avgPricePerPerson exists, use that exact value × group size × meals for the food budget. Never make up prices.
+8. **CROWD INTEL**: When bestTimeToVisit / peakCrowdTime / insiderTips exist (from Reddit + community), weave them in naturally. Phrase as "Locals say…" or "Pro tip:" — NEVER mention Reddit by name.
+9. **QUALITY**: Only recommend places with rating >= 4.0. Skip anything lower even if it's the only match.
+10. **PERSONALIZATION**: Read the user's stated vibe, group, budget, days, interests carefully. Tailor every choice. Never give a generic itinerary that could fit anyone.
+11. **HONESTY**: If the requested experience can't be fulfilled near their area (e.g. casino lover staying in Palolem = 2hr drive), say so plainly and offer a realistic alternative.
+12. **NO PLACEHOLDERS**: Never write "[restaurant name]" or "TBD". If you don't have a specific place, drop that slot.
 
 LIVE PLACES DATA (fetched right now):
 ${JSON.stringify(enrichedContext, null, 2)}
@@ -380,31 +362,16 @@ Then:
 ⚠️ Note: Open/closed status checked at time of building. Verify before visiting as hours can change.`;
 }
 
-async function getBuildCount(supabase, sessionId) {
-  if (!supabase || !sessionId) return 0;
-  try {
-    const cutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString();
-    const { count } = await supabase
-      .from("analytics")
-      .select("id", { count: "exact", head: true })
-      .eq("event_type", "itinerary_built")
-      .filter("data->>session_id", "eq", sessionId)
-      .gte("created_at", cutoff);
-    return count || 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function logBuilt(supabase, { sessionId, area, language, interests, durationDays, dataSource, redditSourced }) {
+async function logBuilt(supabase, { email, sessionId, area, interests, durationDays, dataSource, redditSourced }) {
   if (!supabase) return;
   try {
     await supabase.from("analytics").insert({
       event_type: "itinerary_built",
       area: area || null,
-      language: language || "en",
+      language: "en",
       data: {
-        session_id: sessionId,
+        email: email || null,
+        session_id: sessionId || null,
         interests: interests || [],
         duration_days: durationDays || null,
         data_source: dataSource,
@@ -421,6 +388,7 @@ export async function POST(req) {
     const body = await req.json();
     const message = (body.message || "").toString().trim();
     const sessionId = (body.sessionId || "").toString().trim();
+    const email = normalizeEmail(body.email || "");
 
     if (message.length < 8) {
       return NextResponse.json({ error: "Tell us a bit more about your trip." }, { status: 400 });
@@ -435,18 +403,19 @@ export async function POST(req) {
     const supabase = getSupabaseAdmin();
     const client = new Anthropic({ apiKey });
 
-    // STEP 0 — Build limit
-    const builtCount = sessionId ? await getBuildCount(supabase, sessionId) : 0;
-    if (sessionId && builtCount >= BUILD_LIMIT) {
+    // STEP 0 — Daily build limit (per email, resets at midnight)
+    const builtToday = email ? await getDailyBuildCount(supabase, email) : 0;
+    const bonusBuilds = email ? await getBonusBuilds(supabase, email) : 0;
+    const totalAllowedToday = DAILY_BUILD_LIMIT + bonusBuilds;
+
+    if (email && builtToday >= totalAllowedToday) {
       return NextResponse.json({
         limitReached: true,
-        message: "You've used all 3 itinerary builds on your pass. Save or share your best plan before it expires!",
+        message: `You've used all ${totalAllowedToday} plan generations today. Buy 15 more for ₹30, or come back tomorrow.`,
         buildsRemaining: 0,
+        canBuyExtension: true,
       });
     }
-
-    // STEP 1 — Detect language
-    const detectedLanguage = await detectLanguage(client, message);
 
     // STEP 2 — Parse user input
     const parsed = await parseUserInput(client, message);
@@ -462,7 +431,7 @@ export async function POST(req) {
         needsClarification: true,
         message: "North Goa is huge — that's 50km of coastline! Tell us your exact area for accurate distances and recommendations.",
         areaSuggestions: AREA_SUGGESTIONS,
-        buildsRemaining: BUILD_LIMIT - builtCount,
+        buildsRemaining: Math.max(0, totalAllowedToday - builtToday),
       });
     }
 
@@ -491,7 +460,7 @@ export async function POST(req) {
       ...fetched,
     };
 
-    const systemPrompt = buildSystemPrompt(detectedLanguage, modelContext);
+    const systemPrompt = buildSystemPrompt(modelContext);
     const userMsg = `Original: ${message}
 
 Parsed: Area: ${area} (${coords.lat}, ${coords.lng}) | Budget: ₹${budget ?? "not specified"} | Duration: ${durationDays ?? "?"} days | Group: ${groupType} | Interests: ${interests.join(", ") || "general"}
@@ -518,9 +487,16 @@ Build using ONLY live places above. Exact distances. Open places only.`;
     }
 
     await logBuilt(supabase, {
-      sessionId, area, language: detectedLanguage,
+      email, sessionId, area,
       interests, durationDays, dataSource, redditSourced,
     });
+
+    // If this build went past the free daily limit, consume one bonus credit
+    if (email && builtToday + 1 > DAILY_BUILD_LIMIT) {
+      await consumeBonusBuild(supabase, email);
+    }
+
+    const newBuildsRemaining = Math.max(0, totalAllowedToday - (builtToday + 1));
 
     return NextResponse.json({
       itinerary: text,
@@ -529,9 +505,11 @@ Build using ONLY live places above. Exact distances. Open places only.`;
       redditSourced,
       userArea: area,
       userCoords: coords,
-      language: detectedLanguage,
+      language: "en",
       budgetMissing,
-      buildsRemaining: Math.max(0, BUILD_LIMIT - (builtCount + 1)),
+      buildsRemaining: newBuildsRemaining,
+      dailyLimit: DAILY_BUILD_LIMIT,
+      bonusBuilds,
     });
   } catch (err) {
     console.error("itinerary error", err);

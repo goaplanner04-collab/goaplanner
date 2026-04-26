@@ -33,7 +33,8 @@ export default function ItineraryBuilder() {
   const [toast, setToast] = useState(null);
   const [phIndex, setPhIndex] = useState(0);
   const [clarification, setClarification] = useState(null); // { message, areaSuggestions }
-  const [limitModal, setLimitModal] = useState(null); // { message }
+  const [limitModal, setLimitModal] = useState(null); // { message, canBuyExtension }
+  const [extensionLoading, setExtensionLoading] = useState(false);
   const [shareId, setShareId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [thanked, setThanked] = useState(false);
@@ -68,15 +69,25 @@ export default function ItineraryBuilder() {
     setBudgetTipDismissed(false);
 
     try {
+      let userEmail = "";
+      try { userEmail = localStorage.getItem("goanow_email") || ""; } catch {}
+
       const res = await fetch("/api/itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId: sessionIdRef.current }),
+        body: JSON.stringify({
+          message: text,
+          sessionId: sessionIdRef.current,
+          email: userEmail,
+        }),
       });
       const data = await res.json();
 
       if (data.limitReached) {
-        setLimitModal({ message: data.message || "You've used all 3 itinerary builds." });
+        setLimitModal({
+          message: data.message || "You've used all your plan generations today.",
+          canBuyExtension: !!data.canBuyExtension,
+        });
         setBuildsRemaining(0);
         setLoading(false);
         return;
@@ -147,6 +158,87 @@ export default function ItineraryBuilder() {
       showToast("Copied");
     } catch {
       showToast("Could not copy. Try selecting manually.");
+    }
+  };
+
+  const handleBuyExtension = async () => {
+    let userEmail = "";
+    try { userEmail = localStorage.getItem("goanow_email") || ""; } catch {}
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+      showToast("Sign in first so we can credit your account");
+      return;
+    }
+    setExtensionLoading(true);
+    try {
+      // Load Razorpay script if needed
+      if (!window.Razorpay) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://checkout.razorpay.com/v1/checkout.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.body.appendChild(s);
+        });
+      }
+
+      const orderRes = await fetch("/api/user/buy-extension", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail }),
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.orderId) {
+        showToast(orderData.error || "Could not start payment");
+        setExtensionLoading(false);
+        return;
+      }
+
+      const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      const rzp = new window.Razorpay({
+        key: keyId,
+        amount: orderData.amount,
+        currency: "INR",
+        name: "GoaNow",
+        description: `${orderData.builds} more plan generations`,
+        order_id: orderData.orderId,
+        theme: { color: "#FF3D81" },
+        prefill: { email: userEmail },
+        handler: async (response) => {
+          try {
+            const verifyRes = await fetch("/api/user/verify-extension", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                email: userEmail,
+              }),
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              showToast(`+${verifyData.added} plan generations added 🎉`);
+              setLimitModal(null);
+              setBuildsRemaining(verifyData.added);
+            } else {
+              showToast(verifyData.error || "Verification failed");
+            }
+          } catch {
+            showToast("Verification failed");
+          } finally {
+            setExtensionLoading(false);
+          }
+        },
+        modal: { ondismiss: () => setExtensionLoading(false) },
+      });
+      rzp.on("payment.failed", () => {
+        showToast("Payment failed. Try again.");
+        setExtensionLoading(false);
+      });
+      rzp.open();
+    } catch {
+      showToast("Could not start payment");
+      setExtensionLoading(false);
     }
   };
 
@@ -450,19 +542,29 @@ export default function ItineraryBuilder() {
           onClick={(e) => { if (e.target === e.currentTarget) setLimitModal(null); }}
         >
           <div className="glass-card" style={{ maxWidth: 480, padding: 28, textAlign: "center" }}>
-            <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
-            <h3 style={{ margin: "0 0 12px", color: "var(--neon-pink)", fontSize: 26 }}>You've used all 3 itinerary builds</h3>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>🎯</div>
+            <h3 style={{ margin: "0 0 12px", color: "var(--neon-pink)", fontSize: 26 }}>Daily limit reached</h3>
             <p style={{ color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.5 }}>
               {limitModal.message}
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              {limitModal.canBuyExtension && (
+                <button
+                  onClick={handleBuyExtension}
+                  disabled={extensionLoading}
+                  className="neon-btn"
+                  style={{ fontSize: 15 }}
+                >
+                  {extensionLoading ? "Opening..." : "💎 Buy 15 more for ₹30"}
+                </button>
+              )}
               {result && !shareId && (
-                <button onClick={() => { handleSavePlan(); setLimitModal(null); }} className="neon-btn">
+                <button onClick={() => { handleSavePlan(); setLimitModal(null); }} className="neon-btn-ghost">
                   💾 Save My Plan
                 </button>
               )}
               {shareId && (
-                <button onClick={() => { handleSharePlan(); setLimitModal(null); }} className="neon-btn">
+                <button onClick={() => { handleSharePlan(); setLimitModal(null); }} className="neon-btn-ghost">
                   📤 Share GoaNow
                 </button>
               )}

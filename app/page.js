@@ -64,11 +64,30 @@ export default function LandingPage() {
       url.includes("?code=") ||
       url.includes("&code=");
 
-    const finish = (u) => {
+    const finish = async (u) => {
       if (!mounted || resolved) return;
       resolved = true;
       setUser(u || null);
       setAuthChecked(true);
+
+      // If user is signed in, check the server for an active pass
+      // and auto-redirect to dashboard if one exists. This makes the
+      // pass survive sign-out / new device.
+      if (u?.email) {
+        try {
+          localStorage.setItem("goanow_email", u.email);
+          const res = await fetch(`/api/user/pass?email=${encodeURIComponent(u.email)}`);
+          const data = await res.json();
+          if (data?.active && data?.expiresAt) {
+            const expiryMs = new Date(data.expiresAt).getTime();
+            if (expiryMs > Date.now()) {
+              localStorage.setItem("goanow_plan", data.planName || "Pass");
+              localStorage.setItem("goanow_expiry", String(expiryMs));
+              window.location.replace("/dashboard");
+            }
+          }
+        } catch {}
+      }
     };
 
     // Auth state changes (fires when OAuth tokens are processed)

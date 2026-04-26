@@ -197,6 +197,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week", pref
                 email: isEmailValid(email) ? email.trim().toLowerCase() : undefined,
                 planName: plan.name,
                 expiryAt,
+                durationMs: plan.duration_ms,
               }),
             });
             const verifyData = await verifyRes.json();
