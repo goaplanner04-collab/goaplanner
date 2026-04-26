@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
-import GoogleSignIn from "@/components/GoogleSignIn";
 
 const DEFAULT_PLANS = {
   day: { key: "day", name: "Day Pass", price: 49, paise: 4900, duration_ms: 86400000, label: "24 hours" },
@@ -10,7 +9,7 @@ const DEFAULT_PLANS = {
   trip: { key: "trip", name: "Trip Pass", price: 149, paise: 14900, duration_ms: 2592000000, label: "30 days" },
 };
 
-export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
+export default function PaywallModal({ open, onClose, initialPlan = "week", prefillEmail = "" }) {
   const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [selected, setSelected] = useState(initialPlan);
   const [scriptState, setScriptState] = useState("idle");
@@ -21,7 +20,6 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
   const [trialError, setTrialError] = useState(null);
   const [showTrial, setShowTrial] = useState(false);
   const [email, setEmail] = useState("");
-  const [authedUser, setAuthedUser] = useState(null);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -45,12 +43,18 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
       setTrialCode("");
       setTrialError(null);
       setShowTrial(false);
-      try {
-        const stored = typeof window !== "undefined" ? localStorage.getItem("goanow_email") : "";
-        if (stored) setEmail(stored);
-      } catch {}
+      // Prefer the prop (passed from authed landing page) over localStorage
+      if (prefillEmail) {
+        setEmail(prefillEmail);
+        try { localStorage.setItem("goanow_email", prefillEmail); } catch {}
+      } else {
+        try {
+          const stored = typeof window !== "undefined" ? localStorage.getItem("goanow_email") : "";
+          if (stored) setEmail(stored);
+        } catch {}
+      }
     }
-  }, [open, initialPlan]);
+  }, [open, initialPlan, prefillEmail]);
 
   const loadRazorpayScript = useCallback(() => {
     return new Promise((resolve) => {
@@ -306,35 +310,31 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
 
         <div style={{ marginBottom: 12 }}>
           <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 8, letterSpacing: "0.04em" }}>
-            ✉️ Email (for receipt + plan delivery)
+            ✉️ Receipt + plan delivery
           </label>
-
-          <GoogleSignIn
-            onUser={(u) => {
-              setAuthedUser(u);
-              if (u?.email) {
-                setEmail(u.email);
-                try { localStorage.setItem("goanow_email", u.email); } catch {}
-              }
-            }}
-          />
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.1em" }}>
-            <div style={{ flex: 1, height: 1, background: "var(--border-glass)" }} />
-            OR ENTER MANUALLY
-            <div style={{ flex: 1, height: 1, background: "var(--border-glass)" }} />
-          </div>
-
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="input-field"
-            autoComplete="email"
-            disabled={!!authedUser}
-            style={authedUser ? { opacity: 0.7 } : undefined}
-          />
+          {prefillEmail ? (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px",
+              background: "rgba(0,200,140,0.08)",
+              border: "1px solid rgba(0,200,140,0.3)",
+              borderRadius: 11,
+            }}>
+              <span style={{ color: "#33D6C8", fontSize: 16 }}>✓</span>
+              <span style={{ color: "#fff", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {email || prefillEmail}
+              </span>
+            </div>
+          ) : (
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="input-field"
+              autoComplete="email"
+            />
+          )}
         </div>
 
         <button onClick={handlePay} disabled={processing || scriptState === "loading"} className="neon-btn" style={{ width: "100%", fontSize: 16 }}>
