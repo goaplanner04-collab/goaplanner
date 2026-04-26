@@ -43,16 +43,16 @@ ADMIN_PASSWORD=
 
 TRIAL_KEYS=GOA2024:168,PRESS:72
 
-# Google Places + Geocoding (server-side only — never expose to browser)
-GOOGLE_PLACES_API_KEY=
+# Foursquare Places API (server-side only — never expose to browser)
+FOURSQUARE_API_KEY=
 ```
 
-`GOOGLE_PLACES_API_KEY` setup:
-1. console.cloud.google.com → New project "GoaNow"
-2. Enable: **Places API** + **Geocoding API**
-3. Credentials → Create API Key
-4. Restrict to those two APIs only
-5. Google's $200/month free credit is sufficient for thousands of requests
+`FOURSQUARE_API_KEY` setup:
+1. https://foursquare.com/products/places-api/ → Sign up
+2. Create a Service API key from the developer console
+3. Free tier: 100k Place Search calls + 100k Place Details calls / month
+4. Geocoding fallback: hard-coded Goa town centroids in `lib/foursquare.js`
+   plus OpenStreetMap Nominatim for unknown areas (no key needed)
 
 `TRIAL_KEYS` is optional and uses `CODE:HOURS` pairs. Public browser-exposed variables are only the `NEXT_PUBLIC_*` values.
 
