@@ -45,6 +45,14 @@ TRIAL_KEYS=GOA2024:168,PRESS:72
 
 # Foursquare Places API (server-side only — never expose to browser)
 FOURSQUARE_API_KEY=
+
+# Resend transactional email (server-side only)
+RESEND_API_KEY=
+RESEND_FROM=GoaNow <hello@goanow.in>
+NEXT_PUBLIC_SITE_URL=https://goanow.in
+
+# Cron secret for /api/email/party-blast (used by Railway/external cron)
+CRON_SECRET=
 ```
 
 `FOURSQUARE_API_KEY` setup:
@@ -238,6 +246,40 @@ Frontend stores `share_id`s in `localStorage.goanow_saved_plans`.
 ## Itinerary Build Limit
 
 Each pass allows 3 itinerary builds. Tracked via `analytics` table where `event_type = 'itinerary_built'` and `data->>'session_id' = sessionId`. The frontend gets `buildsRemaining` on every response and shows a save/share modal when it hits 0.
+
+## Email (Resend)
+
+Four email flows:
+- **Welcome / payment confirmation** — sent on Razorpay verify or trial-key activation. Email collected in PaywallModal email field, persisted to `localStorage.goanow_email`.
+- **Itinerary delivery** — "📧 Email Me This Plan" button under any generated itinerary. Falls back to a `prompt()` if no email stored. Saves recipient as a subscriber.
+- **Tonight's Party Blast** — admin-triggered or cron-triggered (`/api/email/party-blast`). Pulls today's `events` and emails to all `email_subscribers` where `opted_out = false`. Authorized via either `x-admin-auth: ADMIN_PASSWORD` or `x-cron-secret: CRON_SECRET`.
+- **Unsubscribe** — every blast includes an unsubscribe link to `/api/email/unsubscribe?email=...`, sets `opted_out = true`.
+
+Add this Supabase table (RLS optional; reads are server-only):
+
+```sql
+CREATE TABLE IF NOT EXISTS email_subscribers (
+  id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+  email       TEXT        UNIQUE NOT NULL,
+  plan_name   TEXT,
+  expiry_at   TIMESTAMPTZ,
+  source      TEXT,
+  opted_out   BOOLEAN     DEFAULT FALSE,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE email_subscribers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service full access" ON email_subscribers FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+```
+
+To run the party blast on a schedule, set `CRON_SECRET` and call:
+```
+POST https://goanow.in/api/email/party-blast
+  Header: x-cron-secret: <CRON_SECRET>
+```
+Daily at 6 PM IST is a sensible cadence — Railway cron, GitHub Actions, or cron-job.org all work.
 
 ## Analytics
 

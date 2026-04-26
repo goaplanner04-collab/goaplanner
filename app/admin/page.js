@@ -704,6 +704,30 @@ CREATE POLICY "Service full access" ON settings FOR ALL
               <button type="button" onClick={() => saveSettings()} disabled={settingsSaving} className="neon-btn" style={{ alignSelf: "flex-start", minWidth: 180 }}>
                 {settingsSaving ? "Saving..." : "💾 Save All Settings"}
               </button>
+
+              {/* PARTY BLAST */}
+              <div className="glass-card" style={{ padding: 18 }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#fff" }}>📧 Tonight's Party Blast</h2>
+                <p style={{ color: "var(--text-muted)", margin: "0 0 14px", fontSize: 13 }}>
+                  Sends today's events as an email to all subscribed users via Resend. Use sparingly — typically once per evening.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm("Send tonight's party blast to all email subscribers?")) return;
+                    try {
+                      const res = await fetch("/api/email/party-blast", { method: "POST", headers: getAuthHeaders() });
+                      const data = await res.json();
+                      if (data.success) showToast(`Sent ${data.sent}/${data.total} 📧 (${data.events} event${data.events === 1 ? "" : "s"})`);
+                      else showToast(data.error || "Blast failed");
+                    } catch { showToast("Blast failed"); }
+                  }}
+                  className="neon-btn neon-btn-cyan"
+                  style={{ alignSelf: "flex-start", minWidth: 220 }}
+                >
+                  🌙 Send Tonight's Blast Now
+                </button>
+              </div>
             </>
           )}
         </div>

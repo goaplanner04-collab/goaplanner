@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { isEmailValid, sendWelcomeEmail } from "@/lib/resend";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,19 +40,46 @@ export async function POST(req) {
   try {
     const body = await req.json().catch(() => ({}));
     const code = normalizeTrialCode(body.code);
+    const customerEmail = (body.email || "").toString().trim().toLowerCase();
 
     if (!code) {
       return NextResponse.json({ success: false, error: "No trial key provided" }, { status: 400 });
     }
 
+    const supabaseForEmail = getSupabaseAdmin();
+    const sendTrialWelcome = (planName, durationHours) => {
+      if (!isEmailValid(customerEmail)) return;
+      const expiryAt = new Date(Date.now() + durationHours * 3600 * 1000).toISOString();
+      if (supabaseForEmail) {
+        supabaseForEmail.from("email_subscribers").upsert(
+          {
+            email: customerEmail,
+            plan_name: planName,
+            expiry_at: expiryAt,
+            source: "trial",
+            opted_out: false,
+          },
+          { onConflict: "email" }
+        ).then(() => {}).catch(() => {});
+      }
+      sendWelcomeEmail({
+        to: customerEmail,
+        planName,
+        expiryAt,
+        source: "trial",
+      }).catch(() => {});
+    };
+
     // 1. Check env var keys first (always works, no DB needed)
     const envKeys = getEnvTrialKeys();
     const envMatch = envKeys.find((k) => k.code === code);
     if (envMatch) {
+      const label = envMatch.label || "Trial Pass";
+      sendTrialWelcome(label, envMatch.duration_hours);
       return NextResponse.json({
         success: true,
         plan: {
-          name: envMatch.label || "Trial Pass",
+          name: label,
           duration_ms: envMatch.duration_hours * 3600 * 1000,
         },
       });
@@ -109,6 +137,8 @@ export async function POST(req) {
       console.error("validate-trial usage update error", updateError);
       return NextResponse.json({ success: false, error: "Server error - could not validate key" }, { status: 500 });
     }
+
+    sendTrialWelcome(label, durationHours);
 
     return NextResponse.json({
       success: true,

@@ -19,6 +19,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState(null);
   const [showTrial, setShowTrial] = useState(false);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     fetch("/api/settings")
@@ -42,6 +43,10 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
       setTrialCode("");
       setTrialError(null);
       setShowTrial(false);
+      try {
+        const stored = typeof window !== "undefined" ? localStorage.getItem("goanow_email") : "";
+        if (stored) setEmail(stored);
+      } catch {}
     }
   }, [open, initialPlan]);
 
@@ -100,8 +105,13 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
   const grantAccess = (planName, durationMs) => {
     localStorage.setItem("goanow_plan", planName);
     localStorage.setItem("goanow_expiry", String(Date.now() + durationMs));
+    if (email && email.trim()) {
+      try { localStorage.setItem("goanow_email", email.trim()); } catch {}
+    }
     window.location.href = "/dashboard";
   };
+
+  const isEmailValid = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
 
   const handleTrialSubmit = async (e) => {
     e.preventDefault();
@@ -112,7 +122,10 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
       const res = await fetch("/api/validate-trial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trialCode.trim() }),
+        body: JSON.stringify({
+          code: trialCode.trim(),
+          email: isEmailValid(email) ? email.trim().toLowerCase() : undefined,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -167,6 +180,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
         theme: { color: "#FF3D81" },
         handler: async (response) => {
           try {
+            const expiryAt = new Date(Date.now() + plan.duration_ms).toISOString();
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -174,6 +188,9 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
+                email: isEmailValid(email) ? email.trim().toLowerCase() : undefined,
+                planName: plan.name,
+                expiryAt,
               }),
             });
             const verifyData = await verifyRes.json();
@@ -189,7 +206,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
           }
         },
         modal: { ondismiss: () => setProcessing(false) },
-        prefill: {},
+        prefill: isEmailValid(email) ? { email: email.trim() } : {},
         notes: { plan: plan.name },
       };
 
@@ -284,6 +301,20 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
             {error}
           </div>
         )}
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 6, letterSpacing: "0.04em" }}>
+            ✉️ Email (for receipt + plan delivery)
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="input-field"
+            autoComplete="email"
+          />
+        </div>
 
         <button onClick={handlePay} disabled={processing || scriptState === "loading"} className="neon-btn" style={{ width: "100%", fontSize: 16 }}>
           {(processing || scriptState === "loading") && (

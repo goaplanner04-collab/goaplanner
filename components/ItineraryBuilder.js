@@ -150,6 +150,39 @@ export default function ItineraryBuilder() {
     }
   };
 
+  const handleEmailPlan = async () => {
+    if (!result) return;
+    let emailToUse = "";
+    try { emailToUse = localStorage.getItem("goanow_email") || ""; } catch {}
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToUse)) {
+      const entered = window.prompt("Send plan to which email?");
+      if (!entered) return;
+      emailToUse = entered.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToUse)) {
+        showToast("That doesn't look like a valid email");
+        return;
+      }
+      try { localStorage.setItem("goanow_email", emailToUse); } catch {}
+    }
+    try {
+      const res = await fetch("/api/email/itinerary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailToUse,
+          itineraryText: result,
+          userArea: meta?.userArea,
+          shareId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) showToast("Sent to your email 📧");
+      else showToast(data.error || "Could not send email");
+    } catch {
+      showToast("Could not send email");
+    }
+  };
+
   const handleSavePlan = async () => {
     if (!result) return;
     setSaving(true);
@@ -381,6 +414,10 @@ export default function ItineraryBuilder() {
                 📤 Share Plan
               </button>
             )}
+            <button onClick={handleEmailPlan} className="neon-btn-ghost mobile-full" style={{ flex: 1, minWidth: 140, borderColor: "rgba(0,245,255,0.4)", color: "var(--neon-cyan)" }}>
+              <Icon name="card" size={17} />
+              📧 Email Me This Plan
+            </button>
             <button onClick={handleReset} className="neon-btn-ghost mobile-full" style={{ flex: 1, minWidth: 140 }}>
               <Icon name="refresh" size={17} />
               Build Another
