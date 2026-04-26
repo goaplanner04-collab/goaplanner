@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import GoogleSignIn from "@/components/GoogleSignIn";
 
 export default function Navbar({ showPlanBadge = false }) {
   const [planInfo, setPlanInfo] = useState(null);
@@ -68,30 +69,40 @@ export default function Navbar({ showPlanBadge = false }) {
           GoaNow
         </a>
 
-        {showPlanBadge && planInfo && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: "rgba(255, 61, 129, 0.12)",
-              border: "1px solid rgba(255, 61, 129, 0.3)",
-              color: "#fff",
-              fontSize: 13,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {showPlanBadge && planInfo && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 12px",
+                borderRadius: 999,
+                background: "rgba(255, 61, 129, 0.12)",
+                border: "1px solid rgba(255, 61, 129, 0.3)",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span className="pulse-dot" style={{ width: 6, height: 6 }} />
+              <span>{planInfo.plan}</span>
+              <span style={{ color: "var(--text-muted)" }}>|</span>
+              <span style={{ color: planInfo.expired ? "#f87171" : "var(--neon-cyan)" }}>
+                {planInfo.label}
+              </span>
+            </div>
+          )}
+          <GoogleSignIn
+            compact
+            onUser={(u) => {
+              if (u?.email) {
+                try { localStorage.setItem("goanow_email", u.email); } catch {}
+              }
             }}
-          >
-            <span className="pulse-dot" style={{ width: 6, height: 6 }} />
-            <span>{planInfo.plan}</span>
-            <span style={{ color: "var(--text-muted)" }}>|</span>
-            <span style={{ color: planInfo.expired ? "#f87171" : "var(--neon-cyan)" }}>
-              {planInfo.label}
-            </span>
-          </div>
-        )}
+          />
+        </div>
       </div>
     </header>
   );

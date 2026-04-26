@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import GoogleSignIn from "@/components/GoogleSignIn";
 
 const DEFAULT_PLANS = {
   day: { key: "day", name: "Day Pass", price: 49, paise: 4900, duration_ms: 86400000, label: "24 hours" },
@@ -20,6 +21,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
   const [trialError, setTrialError] = useState(null);
   const [showTrial, setShowTrial] = useState(false);
   const [email, setEmail] = useState("");
+  const [authedUser, setAuthedUser] = useState(null);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -303,9 +305,26 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
         )}
 
         <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 6, letterSpacing: "0.04em" }}>
+          <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 8, letterSpacing: "0.04em" }}>
             ✉️ Email (for receipt + plan delivery)
           </label>
+
+          <GoogleSignIn
+            onUser={(u) => {
+              setAuthedUser(u);
+              if (u?.email) {
+                setEmail(u.email);
+                try { localStorage.setItem("goanow_email", u.email); } catch {}
+              }
+            }}
+          />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0", color: "var(--text-muted)", fontSize: 11, letterSpacing: "0.1em" }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border-glass)" }} />
+            OR ENTER MANUALLY
+            <div style={{ flex: 1, height: 1, background: "var(--border-glass)" }} />
+          </div>
+
           <input
             type="email"
             value={email}
@@ -313,6 +332,8 @@ export default function PaywallModal({ open, onClose, initialPlan = "week" }) {
             placeholder="you@example.com"
             className="input-field"
             autoComplete="email"
+            disabled={!!authedUser}
+            style={authedUser ? { opacity: 0.7 } : undefined}
           />
         </div>
 

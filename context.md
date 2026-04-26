@@ -247,6 +247,21 @@ Frontend stores `share_id`s in `localStorage.goanow_saved_plans`.
 
 Each pass allows 3 itinerary builds. Tracked via `analytics` table where `event_type = 'itinerary_built'` and `data->>'session_id' = sessionId`. The frontend gets `buildsRemaining` on every response and shows a save/share modal when it hits 0.
 
+## Authentication (Google via Supabase Auth)
+
+- Google sign-in is implemented through Supabase Auth's OAuth flow (no NextAuth, no extra deps).
+- `lib/supabaseBrowser.js` exposes a singleton browser client with session persistence (`localStorage` key `goanow.sb.auth`).
+- `components/GoogleSignIn.js` provides both a full button (used in PaywallModal) and a compact pill (used in Navbar).
+- Sign-in does **not** gate dashboard access; that remains controlled by the `goanow_plan` / `goanow_expiry` localStorage keys plus paid/trial flow. Auth is used purely to capture a verified email for receipts, itinerary delivery, and party blasts.
+- When a user signs in we mirror their email into `localStorage.goanow_email` so other components (ItineraryBuilder, etc.) can pre-fill it.
+
+Required setup steps for Google sign-in:
+1. **Google Cloud Console** → APIs & Services → Credentials → **Create OAuth Client ID** (Web app)
+   - Authorized redirect URI: `https://<your-project>.supabase.co/auth/v1/callback`
+   - Copy the Client ID + Secret.
+2. **Supabase** → Authentication → Providers → **Google** → enable, paste Client ID + Secret.
+3. **Supabase** → Authentication → URL Configuration → set **Site URL** to your production URL and add it to the Redirect URLs allowlist (plus `http://localhost:3000` for dev).
+
 ## Email (Resend)
 
 Four email flows:
