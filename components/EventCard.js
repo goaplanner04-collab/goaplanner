@@ -1,7 +1,32 @@
 "use client";
 
+import { useState } from "react";
 import Icon from "@/components/Icon";
 import { formatDistance } from "@/lib/haversine";
+
+const VIBE_EMOJI = {
+  "Psy Trance": "🌀",
+  "Techno": "⚡",
+  "EDM": "🎵",
+  "Commercial/Bollywood": "🎬",
+  "Live Band": "🎸",
+  "Live Music": "🎸",
+  "Sunset Session": "🌅",
+  "Silent Disco": "🎧",
+  "Indie/Folk": "🎻",
+  "World Music": "🥁",
+};
+
+function vibeEmoji(vibe) {
+  if (!vibe) return "🎉";
+  const key = String(vibe).trim();
+  if (VIBE_EMOJI[key]) return VIBE_EMOJI[key];
+  // Loose match — handle e.g. "Silent Disco — 3 channels"
+  for (const k of Object.keys(VIBE_EMOJI)) {
+    if (key.toLowerCase().startsWith(k.toLowerCase())) return VIBE_EMOJI[k];
+  }
+  return "🎉";
+}
 
 function parseStartTime(s) {
   if (!s) return null;
@@ -29,6 +54,7 @@ function cleanFee(value) {
 }
 
 export default function EventCard({ event, distanceKm }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const parsed = parseStartTime(event.start_time);
 
   let timingNote = null;
@@ -93,31 +119,72 @@ export default function EventCard({ event, distanceKm }) {
         `${event.venue}, ${event.area}, Goa`
       )}`;
 
+  const hasImage = typeof event.image_url === "string" && event.image_url.trim().length > 0 && !imgFailed;
+
   return (
     <div className="glass-card event-card">
-      {event.image_url && (
-        <div style={{
-          marginTop: -16,
-          marginLeft: -16,
-          marginRight: -16,
-          marginBottom: 14,
-          width: "calc(100% + 32px)",
-          height: 200,
-          backgroundImage: `url(${event.image_url})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          borderTopLeftRadius: 14,
-          borderTopRightRadius: 14,
-          position: "relative",
-        }}>
-          <div style={{
-            position: "absolute", inset: 0,
-            background: "linear-gradient(180deg, rgba(7,9,14,0) 40%, rgba(7,9,14,0.65) 100%)",
-            borderTopLeftRadius: 14,
-            borderTopRightRadius: 14,
-          }} />
-        </div>
-      )}
+      <div style={{
+        marginTop: -16,
+        marginLeft: -16,
+        marginRight: -16,
+        marginBottom: 14,
+        width: "calc(100% + 32px)",
+        height: 220,
+        position: "relative",
+        borderTopLeftRadius: 14,
+        borderTopRightRadius: 14,
+        overflow: "hidden",
+        background: hasImage ? "transparent" : "linear-gradient(135deg, rgba(20,22,32,0.95), rgba(11,13,20,0.95))",
+        display: hasImage ? "block" : "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        {hasImage ? (
+          <>
+            <img
+              src={event.image_url}
+              alt={event.name}
+              loading="lazy"
+              onError={() => setImgFailed(true)}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+            <div style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 80,
+              background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.8))",
+              pointerEvents: "none",
+            }} />
+            {event.image_source === "instagram" && (
+              <span style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                background: "rgba(0,0,0,0.6)",
+                color: "#fff",
+                borderRadius: 20,
+                padding: "2px 8px",
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: 0.2,
+              }}>
+                via Instagram
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ fontSize: 48, color: "var(--neon-pink)" }}>
+            {vibeEmoji(event.vibe)}
+          </span>
+        )}
+      </div>
       <div className="card-header-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3

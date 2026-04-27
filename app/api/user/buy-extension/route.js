@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Buy 15 extra plan generations for ₹30
-export const EXTENSION_PRICE_INR = 30;
-export const EXTENSION_BUILDS = 15;
+// Buy 5 extra plan generations for ₹10
+export const EXTENSION_PRICE_INR = 10;
+export const EXTENSION_BUILDS = 5;
 
 export async function POST(req) {
   try {

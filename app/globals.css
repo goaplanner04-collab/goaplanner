@@ -15,6 +15,19 @@
   --border-glass: rgba(255, 255, 255, 0.12);
 }
 
+:root[data-theme="light"] {
+  --bg-primary: #F5F5F0;
+  --bg-card: rgba(0, 0, 0, 0.04);
+  --neon-pink: #E8005A;
+  --neon-cyan: #0099BB;
+  --neon-gold: #B8860B;
+  --neon-violet: #6D28D9;
+  --surface-strong: rgba(245, 245, 240, 0.88);
+  --text-primary: #0A0A0F;
+  --text-muted: #555566;
+  --border-glass: rgba(0, 0, 0, 0.12);
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -309,6 +322,41 @@ a {
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(138, 138, 154, 0.25);
+  border: 1px solid var(--border-glass);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, border-color 0.2s;
+  flex: 0 0 48px;
+}
+.toggle-switch.on {
+  background: var(--neon-pink);
+  border-color: var(--neon-pink);
+}
+.toggle-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.toggle-switch.on .toggle-knob {
+  transform: translateX(22px);
+}
+
 .site-shell {
   min-height: 100vh;
   color: #fff;
@@ -527,7 +575,7 @@ a {
   margin: 0 auto;
   padding: 10px 16px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 

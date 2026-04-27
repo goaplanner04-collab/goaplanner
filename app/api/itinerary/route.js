@@ -28,7 +28,7 @@ export const maxDuration = 60;
 
 const HAIKU = "claude-haiku-4-5-20251001";
 const SONNET = "claude-sonnet-4-20250514";
-export const DAILY_BUILD_LIMIT = 15;
+export const DAILY_BUILD_LIMIT = 5;
 
 const VAGUE_AREAS = new Set([
   "north goa", "south goa", "near beach", "near beaches",
@@ -140,6 +140,31 @@ async function fetchCategoryEnriched(apiKey, anthropicKey, { lat, lng, type, key
     .filter(Boolean)
     .slice(0, limit)
     .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+}
+
+// Fetch today's admin-verified parties from Supabase. Returns [] on any failure
+// so a missing/empty events table never breaks itinerary generation.
+async function fetchTonightsParties(supabase, originCoords) {
+  if (!supabase) return [];
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data, error } = await supabase
+      .from("events")
+      .select("name, venue, area, start_time, entry_fee, vibe, insider_tip, lat, lng, status")
+      .eq("date", today)
+      .lte("publish_on", today)
+      .order("start_time", { ascending: true });
+    if (error || !Array.isArray(data)) return [];
+    return data.map((e) => ({
+      ...e,
+      distanceKm:
+        originCoords && Number.isFinite(e.lat) && Number.isFinite(e.lng)
+          ? calcDistanceKm(originCoords.lat, originCoords.lng, e.lat, e.lng)
+          : null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 function fallbackPlaces(category, lat, lng) {
@@ -378,7 +403,26 @@ Food fallback (only if avgPricePerPerson is missing): local thali/shack ₹100-2
 
 Transport: autos ₹15-20/km, no meters — negotiate upfront. Uber works in North Goa only.
 
-LIVE PLACES DATA (fetched right now, already filtered for openNow !== false):
+${
+  Array.isArray(enrichedContext.tonightsParties) && enrichedContext.tonightsParties.length > 0
+    ? `TONIGHT'S VERIFIED PARTIES (admin-curated by GoaNow team — Instagram-checked daily):
+${enrichedContext.tonightsParties
+  .map(
+    (e) =>
+      `• ${e.name} at ${e.venue}, ${e.area}\n   Time: ${e.start_time} | Entry: ${e.entry_fee || "Check at venue"}\n   Vibe: ${e.vibe || "Party"}${e.insider_tip ? `\n   Insider: ${e.insider_tip}` : ""}${e.distanceKm != null ? `\n   ~${e.distanceKm} km from user area` : ""}`
+  )
+  .join("\n\n")}
+
+When the user's interests include parties or nightlife, ALWAYS prefer these over any generic party knowledge:
+- Use the exact venue name, area, time, and entry fee from this list. Do not paraphrase the venue or change the time.
+- Write the description in your own voice — short, specific, no clichés.
+- Always mention: "Real crowd arrives ~2 hours after the listed time, don't show up before then."
+- If distanceKm is given, weave it into the directions line.
+- Never invent a party. If none of these fit the user's area or vibe, say so honestly and skip the night slot.
+
+`
+    : ""
+}LIVE PLACES DATA (fetched right now, already filtered for openNow !== false):
 ${JSON.stringify(enrichedContext, null, 2)}`;
 }
 
@@ -431,7 +475,7 @@ export async function POST(req) {
     if (email && builtToday >= totalAllowedToday) {
       return NextResponse.json({
         limitReached: true,
-        message: `You've used all ${totalAllowedToday} plan generations today. Buy 15 more for ₹30, or come back tomorrow.`,
+        message: `You've used all ${totalAllowedToday} plan generations today. Buy 5 more for ₹10, or come back tomorrow.`,
         buildsRemaining: 0,
         canBuyExtension: true,
       });
@@ -490,12 +534,16 @@ export async function POST(req) {
         area, lat: coords.lat, lng: coords.lng, interests,
       });
 
+    // STEP 5b — Pull today's verified party data from Supabase (admin-curated)
+    const tonightsParties = await fetchTonightsParties(supabase, coords);
+
     const modelContext = {
       userArea: area,
       userLat: coords.lat,
       userLng: coords.lng,
       userTransport: transport,
       dataSource,
+      tonightsParties,
       ...fetched,
     };
 

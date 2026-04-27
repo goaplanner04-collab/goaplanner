@@ -649,7 +649,7 @@ export default function ItineraryBuilder() {
                   className="neon-btn"
                   style={{ fontSize: 15 }}
                 >
-                  {extensionLoading ? "Opening..." : "💎 Buy 15 more for ₹30"}
+                  {extensionLoading ? "Opening..." : "💎 Buy 5 more for ₹10"}
                 </button>
               )}
               {result && !shareId && (

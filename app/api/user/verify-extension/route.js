@@ -6,7 +6,7 @@ import { addBonusBuilds } from "@/lib/userPass";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const EXTENSION_BUILDS = 15;
+const EXTENSION_BUILDS = 5;
 
 export async function POST(req) {
   try {

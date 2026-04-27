@@ -13,12 +13,14 @@ import LoadingSkeleton, { PulsingDotLoader } from "@/components/LoadingSkeleton"
 import ShareButton from "@/components/ShareButton";
 import { spots } from "@/lib/spotsData";
 import { getDistanceKm } from "@/lib/haversine";
+import { getSavedTheme, applyTheme } from "@/lib/theme";
 
 const TABS = [
   { key: "nearby", label: "Nearby", icon: "map-pin" },
   { key: "hotels", label: "🏨 Hotels", icon: null },
   { key: "events", label: "Parties", icon: "music" },
   { key: "ai", label: "AI Plan", icon: "route" },
+  { key: "settings", label: "⚙️ Settings", icon: null },
 ];
 
 const GOA_CENTER = { lat: 15.2993, lng: 74.1240 };
@@ -110,7 +112,7 @@ export default function DashboardPage() {
           position: "sticky",
           top: 60,
           zIndex: 40,
-          background: "rgba(7, 9, 14, 0.88)",
+          background: "var(--surface-strong)",
           backdropFilter: "blur(16px)",
           WebkitBackdropFilter: "blur(16px)",
           borderBottom: "1px solid var(--border-glass)",
@@ -135,6 +137,7 @@ export default function DashboardPage() {
         {tab === "hotels" && <HotelsTab />}
         {tab === "events" && <EventsTab />}
         {tab === "ai" && <ItineraryBuilder />}
+        {tab === "settings" && <SettingsTab />}
       </div>
 
       <ShareButton />
@@ -708,6 +711,304 @@ function EventsTab() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const [theme, setTheme] = useState("dark");
+  const [storedEmail, setStoredEmail] = useState("");
+  const [notifsOn, setNotifsOn] = useState(true);
+  const [showReEnter, setShowReEnter] = useState(false);
+  const [reEnterEmail, setReEnterEmail] = useState("");
+  const [statusMsg, setStatusMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [passInfo, setPassInfo] = useState(null);
+  const [shareToast, setShareToast] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setTheme(getSavedTheme());
+
+    let email = "";
+    try { email = localStorage.getItem("goanow_email") || ""; } catch {}
+    setStoredEmail(email);
+
+    let notifsFlag = "on";
+    try { notifsFlag = localStorage.getItem("goanow_notifications") || "on"; } catch {}
+    setNotifsOn(notifsFlag !== "off");
+
+    try {
+      const plan = localStorage.getItem("goanow_plan") || "Trial Pass";
+      const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
+      if (expiry > 0) {
+        const daysLeft = Math.max(0, Math.ceil((expiry - Date.now()) / (24 * 60 * 60 * 1000)));
+        setPassInfo({
+          plan,
+          daysRemaining: daysLeft,
+          expiryDate: new Date(expiry).toLocaleDateString("en-IN", {
+            day: "numeric", month: "short", year: "numeric",
+          }),
+        });
+      }
+    } catch {}
+  }, []);
+
+  const handleThemeChange = (newTheme) => {
+    applyTheme(newTheme);
+    setTheme(newTheme);
+  };
+
+  const resubscribe = async (email) => {
+    setBusy(true);
+    setStatusMsg(null);
+    try {
+      const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
+      const plan = localStorage.getItem("goanow_plan") || "Trial Pass";
+      const res = await fetch("/api/email/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          plan_name: plan,
+          expiry_at: expiry > 0 ? new Date(expiry).toISOString() : null,
+          source: "paid",
+        }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        try { localStorage.setItem("goanow_notifications", "on"); } catch {}
+        try { localStorage.setItem("goanow_email", email); } catch {}
+        setStoredEmail(email);
+        setNotifsOn(true);
+        setShowReEnter(false);
+        setReEnterEmail("");
+        setStatusMsg("You'll receive party updates at 4:30 PM 🎉");
+      } else {
+        setStatusMsg(data?.error || "Could not re-subscribe. Try again.");
+      }
+    } catch {
+      setStatusMsg("Could not re-subscribe. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleToggleNotifications = async () => {
+    if (busy) return;
+    if (notifsOn) {
+      if (!storedEmail) {
+        try { localStorage.setItem("goanow_notifications", "off"); } catch {}
+        setNotifsOn(false);
+        setStatusMsg("Notifications turned off");
+        return;
+      }
+      setBusy(true);
+      setStatusMsg(null);
+      try {
+        await fetch(`/api/email/unsubscribe?email=${encodeURIComponent(storedEmail)}`);
+        try { localStorage.setItem("goanow_notifications", "off"); } catch {}
+        setNotifsOn(false);
+        setStatusMsg("You've unsubscribed from party emails");
+      } catch {
+        setStatusMsg("Could not unsubscribe. Try again.");
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      if (storedEmail) {
+        await resubscribe(storedEmail);
+      } else {
+        setShowReEnter(true);
+        setStatusMsg(null);
+      }
+    }
+  };
+
+  const handleReEnterSubmit = async (e) => {
+    e.preventDefault();
+    const email = reEnterEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setStatusMsg("Enter a valid email");
+      return;
+    }
+    await resubscribe(email);
+  };
+
+  const handleShare = async () => {
+    const url = "https://goanow.online";
+    const text = "Check out GoaNow — live party intel + AI Goa trip planner!";
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: "GoaNow", text, url });
+        return;
+      } catch {
+        // user cancelled or unsupported — fall through to clipboard
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareToast("Link copied!");
+      setTimeout(() => setShareToast(null), 2500);
+    } catch {
+      setShareToast(url);
+      setTimeout(() => setShareToast(null), 3500);
+    }
+  };
+
+  const sectionLabelStyle = {
+    color: "var(--text-muted)",
+    fontSize: 13,
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    fontWeight: 600,
+  };
+
+  return (
+    <div>
+      <h2 style={{
+        margin: "8px 0 22px",
+        fontFamily: "'Bebas Neue'",
+        fontSize: 36,
+        color: "var(--text-primary)",
+        letterSpacing: 0.5,
+        lineHeight: 1.1,
+      }}>
+        Settings
+      </h2>
+
+      {/* Appearance */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={sectionLabelStyle}>Theme</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {[
+            { key: "dark", label: "Dark Mode", emoji: "🌙" },
+            { key: "light", label: "Light Mode", emoji: "☀️" },
+          ].map((opt) => {
+            const active = theme === opt.key;
+            return (
+              <button
+                key={opt.key}
+                onClick={() => handleThemeChange(opt.key)}
+                style={{
+                  padding: 16,
+                  borderRadius: 8,
+                  textAlign: "center",
+                  background: active ? "rgba(255,45,120,0.08)" : "var(--bg-card)",
+                  border: active ? "2px solid var(--neon-pink)" : "1px solid var(--border-glass)",
+                  color: "var(--text-primary)",
+                  cursor: "pointer",
+                  fontFamily: "Inter, sans-serif",
+                  fontSize: 14,
+                  transition: "all 0.18s ease",
+                }}
+              >
+                <div style={{ fontSize: 24, lineHeight: 1 }}>{opt.emoji}</div>
+                <div style={{ marginTop: 8, fontWeight: active ? 600 : 400 }}>{opt.label}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Notifications */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={sectionLabelStyle}>Party Email Notifications</div>
+        <div className="glass-card" style={{ padding: 16 }}>
+          {storedEmail ? (
+            <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 14 }}>
+              Sending to: <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{storedEmail}</span>
+            </div>
+          ) : (
+            <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 14 }}>
+              No email registered. Email is collected at payment.
+            </div>
+          )}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}>
+            <div style={{ fontSize: 14, color: "var(--text-primary)", flex: 1, minWidth: 0 }}>
+              Daily 4:30 PM party updates
+            </div>
+            <button
+              type="button"
+              onClick={handleToggleNotifications}
+              className={"toggle-switch" + (notifsOn ? " on" : "")}
+              disabled={busy}
+              aria-label={notifsOn ? "Turn off notifications" : "Turn on notifications"}
+              aria-pressed={notifsOn}
+            >
+              <span className="toggle-knob" />
+            </button>
+          </div>
+
+          {showReEnter && (
+            <form onSubmit={handleReEnterSubmit} style={{
+              display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap",
+            }}>
+              <input
+                type="email"
+                value={reEnterEmail}
+                onChange={(e) => setReEnterEmail(e.target.value)}
+                placeholder="you@gmail.com"
+                className="input-field"
+                style={{ flex: 1, minWidth: 180 }}
+                required
+              />
+              <button type="submit" className="neon-btn" disabled={busy} style={{ minWidth: 130 }}>
+                {busy ? "..." : "Re-subscribe"}
+              </button>
+            </form>
+          )}
+
+          {statusMsg && (
+            <div style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: "var(--neon-cyan)",
+            }}>
+              {statusMsg}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Pass Info */}
+      {passInfo && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={sectionLabelStyle}>Pass Info</div>
+          <div className="glass-card" style={{ padding: 16 }}>
+            <div style={{ marginBottom: 6, fontSize: 14, color: "var(--text-primary)" }}>
+              Current Pass:{" "}
+              <span style={{ color: "var(--neon-pink)", fontWeight: 600 }}>{passInfo.plan}</span>
+              {" "}({passInfo.daysRemaining} day{passInfo.daysRemaining === 1 ? "" : "s"} remaining)
+            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
+              Pass expires: {passInfo.expiryDate}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Account */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={sectionLabelStyle}>Account</div>
+        <div className="glass-card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 14, color: "var(--text-primary)" }}>
+            Share GoaNow with friends
+          </div>
+          <button onClick={handleShare} className="neon-btn" style={{ alignSelf: "flex-start" }}>
+            📤 Share GoaNow
+          </button>
+        </div>
+      </div>
+
+      {shareToast && <div className="toast">{shareToast}</div>}
     </div>
   );
 }
