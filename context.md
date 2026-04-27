@@ -11,7 +11,7 @@ GoaNow is a Next.js 14 App Router app for tourists in Goa. It sells one-time acc
 - Payments: Razorpay Checkout with server-side order creation and HMAC verification
 - Database: Supabase Postgres via `@supabase/supabase-js`
 - AI: Anthropic SDK
-- Data helpers: hard-coded spots in `lib/spotsData.js`, distance calculation in `lib/haversine.js`
+- Data helpers: hard-coded spots in `lib/spotsData.js`, distance calculation in `lib/haversine.js`, Google Places (New) v1 client in `lib/googlePlaces.js`
 
 ## Important Commands
 
@@ -43,8 +43,8 @@ ADMIN_PASSWORD=
 
 TRIAL_KEYS=GOA2024:168,PRESS:72
 
-# Foursquare Places API (server-side only — never expose to browser)
-FOURSQUARE_API_KEY=
+# Google Places API (NEW) v1 — server-side only — never expose to browser
+GOOGLE_PLACES_API_KEY=
 
 # Resend transactional email (server-side only)
 RESEND_API_KEY=
@@ -55,12 +55,13 @@ NEXT_PUBLIC_SITE_URL=https://goanow.online
 CRON_SECRET=
 ```
 
-`FOURSQUARE_API_KEY` setup:
-1. https://foursquare.com/products/places-api/ → Sign up
-2. Create a Service API key from the developer console
-3. Free tier: 100k Place Search calls + 100k Place Details calls / month
-4. Geocoding fallback: hard-coded Goa town centroids in `lib/foursquare.js`
-   plus OpenStreetMap Nominatim for unknown areas (no key needed)
+`GOOGLE_PLACES_API_KEY` setup:
+1. https://console.cloud.google.com → APIs & Services → Library, enable both:
+   - **Places API (New)** (places.googleapis.com — used for search + details)
+   - **Geocoding API** (used for area name → coords fallback)
+2. Credentials → Create API key. Set **Application restrictions = None** (or IP-restrict to your server). HTTP-referrer restrictions break server-side calls because the Referer header is empty.
+3. Diagnose any 403/REQUEST_DENIED via `/api/places/debug` — it returns the exact Google error.
+4. Geocoding fallback chain in `lib/googlePlaces.js`: hard-coded Goa town centroids → Geocoding API → `GOA_CENTER`.
 
 `TRIAL_KEYS` is optional and uses `CODE:HOURS` pairs. Public browser-exposed variables are only the `NEXT_PUBLIC_*` values.
 
@@ -75,11 +76,12 @@ CRON_SECRET=
 
 ## Dashboard Behavior
 
-The dashboard has three tabs:
+The dashboard has four tabs (default: **Nearby**):
 
-- Nearby: uses browser geolocation when available, falls back to manual Goa area lookup or Goa center. Spots come from `lib/spotsData.js` and are sorted by Haversine distance or rating.
-- Parties: fetches `/api/events`, optionally computes distance to events if the browser grants location.
-- AI Plan: renders `components/ItineraryBuilder.js`, which posts trip details to `/api/itinerary`.
+- **Nearby**: uses browser geolocation when available, falls back to manual Goa area lookup or Goa center. Spots come from `/api/places` (live Google data, with `lib/spotsData.js` as fallback) and are sorted by Haversine distance or rating.
+- **🏨 Hotels**: 3-screen flow — area picker (15 Goa towns) → stay-type picker (Beachside Resort / Hotel / Boutique-Villa / Hostel-Zostel / Guesthouse) → results from `/api/hotels`. A stay-type pill bar on the results screen lets users switch type without going back. Renders via `components/HotelCard.js` with photo carousel + tap-to-cycle.
+- **Parties**: fetches `/api/events`, optionally computes distance to events if the browser grants location.
+- **AI Plan**: renders `components/ItineraryBuilder.js`, which posts trip details to `/api/itinerary`. The result is parsed line-by-line so 📍 place lines get an inline 2-photo strip below them when matching photos exist in the response's `placePhotos` map.
 
 Pass enforcement is client-side only. Payment or trial success writes:
 
@@ -208,10 +210,13 @@ Trial keys in Supabase track `code`, `label`, `duration_hours`, `max_uses`, and 
 
 ## AI Features
 
-- `/api/itinerary`: language-detected, area-clarifying, build-limited (3/pass) itinerary generator. Pulls live Google Places + Reddit crowd intel, then `claude-sonnet-4-20250514` builds the day-by-day plan.
+- `/api/itinerary`: English-only, area-clarifying, transport-aware, daily-build-limited (15/email/day + ₹30 extension for 15 more) itinerary generator. Pulls live Google Places (New) + Reddit crowd intel, then `claude-sonnet-4-20250514` builds the day-by-day plan in the format `📍 [Time] — [Place] / 🗺️ Directions / 🛵 ~X mins by scooter`. Returns `placePhotos` (map of place name → first 2 photo URLs) for inline rendering.
 - `/api/admin/extract-flyer`: uses `claude-sonnet-4-20250514` vision to extract event fields from an uploaded flyer image.
 - `/api/admin/scrape-district`: fetches or accepts pasted District.in content and uses `claude-haiku-4-5-20251001` to extract Goa events.
-- `/api/places`: server-side Google Places proxy with category-aware search, photo carousel data, quality filter (rating >= 4.0, reviews >= 50), avg-price extraction via Haiku, 15-minute in-memory cache, graceful fallback to `lib/spotsData.js`.
+- `/api/places`: server-side Google Places (New) v1 proxy with category-aware search, photo proxy data, quality filter (rating ≥ 4.0, reviews ≥ 30), avg-price extraction via Haiku, 15-minute in-memory cache, graceful fallback to `lib/spotsData.js`. The new API returns full details inside search results, so there is no separate `placeDetails` round-trip.
+- `/api/hotels`: same Places (New) v1 client, keyed off `area` + `stayType` (5 stay-type → keyword mappings in `app/api/hotels/route.js`). Lower review threshold (≥ 20) since hotels accumulate fewer reviews. Sorted by rating DESC.
+- `/api/photo`: server-side proxy for Place photos. The new API returns a `photoUri` JSON response (with `skipHttpRedirect=true`); we fetch and stream the image bytes so the API key never reaches the browser.
+- `/api/places/debug`: diagnostic endpoint — calls Text Search + Geocoding directly, returns HTTP/Google status and a human-readable diagnosis. Use this first when live data shows the fallback banner.
 - `/api/crowd-intel`: Reddit search → Haiku analysis → Supabase 24h cache. Returns best time, peak crowd, avg price, complaints, insider tips.
 
 All AI routes require `ANTHROPIC_API_KEY`. Admin AI routes also require the admin auth header.
@@ -245,7 +250,7 @@ Frontend stores `share_id`s in `localStorage.goanow_saved_plans`.
 
 ## Itinerary Build Limit
 
-Each pass allows 3 itinerary builds. Tracked via `analytics` table where `event_type = 'itinerary_built'` and `data->>'session_id' = sessionId`. The frontend gets `buildsRemaining` on every response and shows a save/share modal when it hits 0.
+Each verified email can build **15 itineraries per calendar day** (defined as `DAILY_BUILD_LIMIT` in `app/api/itinerary/route.js`). Counts come from the `analytics` table where `event_type = 'itinerary_built'` and `data->>'email'` matches the user's email — see `getDailyBuildCount` in `lib/userPass.js`. Once the daily limit is hit, the user can buy a **₹30 extension** for 15 additional builds via `/api/user/buy-extension` → Razorpay → `/api/user/verify-extension`. The frontend gets `buildsRemaining` on every response and surfaces a buy-extension modal when it hits 0.
 
 ## Authentication (Google via Supabase Auth)
 
@@ -317,8 +322,9 @@ Admin auth is intentionally simple: the password is compared to `ADMIN_PASSWORD`
 
 - `components/Navbar.js`: dashboard navigation/header.
 - `components/PaywallModal.js`: pricing, Razorpay flow, trial key entry.
-- `components/ItineraryBuilder.js`: AI itinerary UI.
+- `components/ItineraryBuilder.js`: AI itinerary UI; includes the `ItineraryWithPhotos` renderer that walks the plan text line-by-line and injects 2-photo strips below 📍 lines whose place name matches `placePhotos`.
 - `components/SpotCard.js`: nearby spot cards.
+- `components/HotelCard.js`: hotel/stay cards with photo carousel (tap-to-cycle, dot indicators), per-night price estimate, and Directions + Website/Call buttons. Hostel/Zostel cards also surface a booking-direct tip.
 - `components/EventCard.js`: event display cards.
 - `components/CategoryFilter.js`: category pills for nearby spots.
 - `components/ShareButton.js`: floating share affordance.
