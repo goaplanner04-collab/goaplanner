@@ -297,31 +297,39 @@ DATA RULES — NON-NEGOTIABLE
 11. If the user is vague about budget, group size, or duration, use a reasonable default and note it in one short line.
 
 USER TRANSPORT
-The user's transport mode is in userTransport in the live data. Tailor every "Getting there" line to it:
-- "scooter" → "Getting there: ~[X] min by scooter. Park near [landmark if relevant]." Mention parking when it's known to be hard (Anjuna market days, peak Baga, Old Goa church area).
-- "car" → "Getting there: ~[X] min by car. [Note any parking constraint]." Suggest paid parking lots when narrow streets are an issue (Fontainhas, Old Goa, Panjim center).
-- "bike" → same as scooter, add "easy bike parking" note when relevant.
-- "none" → "Getting there: ~[X] min by auto, approx ₹[fare based on ₹15-20/km × distance]. Or ~[X] min by Uber if in North Goa." For stretches > 10 km, suggest renting a scooter for the day instead and explain why (cheaper, more flexible). For ferries (Chorao, Divar) note schedules. For airport pickups/long transfers note Uber works at the airport.
+The user's transport mode is in userTransport in the live data. The 🛵 line is the canonical time estimate (always scooter-based). Adapt the 🗺️ Directions line to the user's mode:
+- "scooter" or "bike" → directions are landmark-based as written. Mention parking when it's known to be hard (Anjuna market days, peak Baga, Old Goa church area). For "bike", add "easy bike parking" notes when relevant.
+- "car" → keep the same landmark directions, but where relevant note narrow stretches or paid parking lots (Fontainhas, Old Goa, Panjim center) at the end of the 🗺️ line.
+- "none" → at the end of the 🗺️ line add "Auto fare ~₹[Y]" using ₹15-20/km × distanceKm. For stretches > 10 km, briefly suggest renting a scooter for the day. Note Uber works in North Goa and at the airport. For ferries (Chorao, Divar) note schedules.
 
 OUTPUT FORMAT
-Write a clean structured plan. Use this exact shape, nothing else:
+Write a clean, structured plan. Use this exact shape, nothing else:
 
-Day 1 — [a short, specific subtitle, e.g. "Morjim slow morning, Vagator sunset"]
+Day 1: [a short, specific subtitle, e.g. "Morjim slow morning, Vagator sunset"]
 
-Morning
-[Place Name] · [X.X km away] · [rating]/5
-A short, specific paragraph (2-3 sentences) about what to do here. If bestTimeToVisit or peakCrowdTime is known, mention it naturally. If insiderTips exist, weave one in as "Locals say:" or "Pro tip:". Mention price using avgPricePerPerson if available.
-Getting there: [transport-specific guidance per the rules above]
+📍 Morning — [Place Name] ([X.X km from {userArea}])
+A short, specific paragraph (2-3 sentences) about what to do here. If bestTimeToVisit or peakCrowdTime is known, mention it naturally. If insiderTips exist, weave one in as "Locals say:" or "Pro tip:". Mention price using avgPricePerPerson if available. If userTransport is "none" or "car" and parking/transit nuance matters, note it briefly inside this paragraph.
+🗺️ Directions: [Simple plain English landmark-based directions from the previous stop, or from the user's area for the first stop]
+🛵 ~[X] mins by scooter from [previous place name, or user's area for the first stop]
 
-Afternoon
-[Place Name] · [X.X km away] · [rating]/5
+📍 Afternoon — [Place Name] ([X.X km from {userArea}])
 [same shape]
-Getting there: [transport-specific]
+🗺️ Directions: [landmark-based]
+🛵 ~[X] mins by scooter from [previous stop]
 
-Evening
-[Place Name] · [X.X km away] · [rating]/5
+📍 Evening — [Place Name] ([X.X km from {userArea}])
 [same shape]
-Getting there: [transport-specific]
+🗺️ Directions: [landmark-based]
+🛵 ~[X] mins by scooter from [previous stop]
+
+DIRECTIONS RULES (apply to every 🗺️ line):
+- Simple, landmark-based — Goa has no clear street addresses. Use junctions, beach roads, well-known venues as reference points.
+- Scooter-oriented — most tourists use scooters. The 🛵 line is the canonical time estimate even if userTransport is car or none.
+- Mention recognizable landmarks or junctions ("Chapora junction", "Tito's Lane", "Anjuna market road").
+- Never use coordinates, GPS bearings, or technical navigation language.
+- For very well-known venues, you may write: "Easily found on Google Maps — search [Place Name] [Area]."
+- If userTransport is "car", you can briefly add "(same route by car, watch the narrow stretch near X)" inside the 🗺️ line when relevant.
+- If userTransport is "none", you can briefly add "Auto fare ~₹[Y]" at the end of the 🗺️ line based on ₹15-20/km × distance.
 
 Repeat for each day requested.
 
@@ -535,6 +543,23 @@ Build using ONLY live places above. Exact distances. Open places only. For each 
 
     const newBuildsRemaining = Math.max(0, totalAllowedToday - (builtToday + 1));
 
+    // Flat map of place name → first 2 photo URLs, for inline rendering in the UI.
+    // Skip places without photos.
+    const placePhotos = {};
+    for (const list of Object.values(fetched)) {
+      if (!Array.isArray(list)) continue;
+      for (const place of list) {
+        if (
+          place?.name &&
+          Array.isArray(place.photos) &&
+          place.photos.length > 0 &&
+          !placePhotos[place.name]
+        ) {
+          placePhotos[place.name] = place.photos.slice(0, 2);
+        }
+      }
+    }
+
     return NextResponse.json({
       itinerary: text,
       dataSource,
@@ -547,6 +572,7 @@ Build using ONLY live places above. Exact distances. Open places only. For each 
       buildsRemaining: newBuildsRemaining,
       dailyLimit: DAILY_BUILD_LIMIT,
       bonusBuilds,
+      placePhotos,
     });
   } catch (err) {
     console.error("itinerary error", err);

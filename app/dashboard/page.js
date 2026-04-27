@@ -7,6 +7,7 @@ import Icon from "@/components/Icon";
 import CategoryFilter from "@/components/CategoryFilter";
 import SpotCard from "@/components/SpotCard";
 import EventCard from "@/components/EventCard";
+import HotelCard from "@/components/HotelCard";
 import ItineraryBuilder from "@/components/ItineraryBuilder";
 import LoadingSkeleton, { PulsingDotLoader } from "@/components/LoadingSkeleton";
 import ShareButton from "@/components/ShareButton";
@@ -15,6 +16,7 @@ import { getDistanceKm } from "@/lib/haversine";
 
 const TABS = [
   { key: "nearby", label: "Nearby", icon: "map-pin" },
+  { key: "hotels", label: "🏨 Hotels", icon: null },
   { key: "events", label: "Parties", icon: "music" },
   { key: "ai", label: "AI Plan", icon: "route" },
 ];
@@ -39,6 +41,32 @@ const AREAS_FALLBACK = {
   assagao: { lat: 15.5891, lng: 73.7629 },
   ashvem: { lat: 15.6531, lng: 73.7128 },
 };
+
+const HOTEL_AREAS = [
+  { name: "Morjim",      subtitle: "Quiet beach, turtle nesting" },
+  { name: "Arambol",     subtitle: "Boho vibes, hippie paradise" },
+  { name: "Mandrem",     subtitle: "Most peaceful beach in Goa" },
+  { name: "Vagator",     subtitle: "Party scene, cliff views" },
+  { name: "Anjuna",      subtitle: "Flea market, nightlife" },
+  { name: "Calangute",   subtitle: "Most popular, lively" },
+  { name: "Baga",        subtitle: "Restaurants, watersports" },
+  { name: "Candolim",    subtitle: "Calm, upscale" },
+  { name: "Panjim",      subtitle: "Capital city, heritage" },
+  { name: "Assagao",     subtitle: "Boutique cafes, peaceful" },
+  { name: "Palolem",     subtitle: "South Goa, beautiful bay" },
+  { name: "Cavelossim",  subtitle: "South Goa, luxury resorts" },
+  { name: "Colva",       subtitle: "South Goa, long beach" },
+  { name: "Benaulim",    subtitle: "South Goa, quiet" },
+  { name: "Margao",      subtitle: "South Goa, city center" },
+];
+
+const STAY_TYPES = [
+  { key: "beachside_resort", emoji: "🏖️", label: "Beachside Resort", subtitle: "Wake up steps from the beach" },
+  { key: "hotel",            emoji: "🏨", label: "Hotel",             subtitle: "Comfortable, all amenities" },
+  { key: "boutique_villa",   emoji: "🌿", label: "Boutique / Villa",  subtitle: "Intimate, unique, Insta-worthy" },
+  { key: "hostel",           emoji: "🎒", label: "Hostel / Zostel",   subtitle: "Budget-friendly, meet travelers" },
+  { key: "guesthouse",       emoji: "🏡", label: "Guesthouse",        subtitle: "Local, homely, affordable" },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -95,7 +123,7 @@ export default function DashboardPage() {
               onClick={() => setTab(item.key)}
               className={"dashboard-tab" + (tab === item.key ? " active" : "")}
             >
-              <Icon name={item.icon} size={17} />
+              {item.icon ? <Icon name={item.icon} size={17} /> : null}
               {item.label}
             </button>
           ))}
@@ -104,6 +132,7 @@ export default function DashboardPage() {
 
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 14px" }} className="animate-fadeUp">
         {tab === "nearby" && <NearbyTab />}
+        {tab === "hotels" && <HotelsTab />}
         {tab === "events" && <EventsTab />}
         {tab === "ai" && <ItineraryBuilder />}
       </div>
@@ -121,7 +150,7 @@ function NearbyTab() {
   const [sortMode, setSortMode] = useState("distance");
   const [livePlaces, setLivePlaces] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
-  const [dataSource, setDataSource] = useState(null); // "live" | "partial" | "fallback"
+  const [dataSource, setDataSource] = useState(null);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -139,7 +168,6 @@ function NearbyTab() {
     );
   }, []);
 
-  // Fetch live places from /api/places whenever coords or category change
   useEffect(() => {
     if (!coords) return;
     setPlacesLoading(true);
@@ -170,7 +198,6 @@ function NearbyTab() {
   };
 
   const list = useMemo(() => {
-    // Prefer live data when available, fall back to spotsData
     let arr;
     if (livePlaces && livePlaces.length > 0) {
       arr = livePlaces.map((p) => ({
@@ -297,6 +324,295 @@ function NearbyTab() {
           list.map((spot) => <SpotCard key={spot.id} spot={spot} distanceKm={spot.distance} />)
         )}
       </div>
+    </div>
+  );
+}
+
+function HotelsTab() {
+  const [selectedArea, setSelectedArea] = useState(null);
+  const [selectedStayType, setSelectedStayType] = useState(null);
+  const [hotels, setHotels] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [fallbackMessage, setFallbackMessage] = useState(null);
+
+  useEffect(() => {
+    if (!selectedArea || !selectedStayType) return;
+    setLoading(true);
+    setError(null);
+    setFallbackMessage(null);
+    const url = `/api/hotels?area=${encodeURIComponent(selectedArea)}&stayType=${encodeURIComponent(selectedStayType)}&radius=5000`;
+    fetch(url)
+      .then(async (r) => {
+        const headerSource = r.headers.get("X-Data-Source") || "live";
+        const data = await r.json();
+        return { data, headerSource };
+      })
+      .then(({ data, headerSource }) => {
+        setHotels(Array.isArray(data?.hotels) ? data.hotels : []);
+        if (headerSource === "fallback" && data?.message) {
+          setFallbackMessage(data.message);
+        }
+      })
+      .catch(() => {
+        setHotels([]);
+        setError("Couldn't load hotels. Check your connection and try again.");
+      })
+      .finally(() => setLoading(false));
+  }, [selectedArea, selectedStayType]);
+
+  const handleAreaPick = (area) => {
+    setSelectedArea(area);
+    setSelectedStayType(null);
+    setHotels(null);
+  };
+  const handleStayTypePick = (stayType) => {
+    setSelectedStayType(stayType);
+  };
+  const handleChangeArea = () => {
+    setSelectedArea(null);
+    setSelectedStayType(null);
+    setHotels(null);
+  };
+  const handleChangeStayType = (newType) => {
+    setSelectedStayType(newType);
+    setHotels(null);
+  };
+
+  if (!selectedArea) {
+    return (
+      <div>
+        <h2 style={{
+          margin: "8px 0 6px",
+          fontFamily: "'Bebas Neue'",
+          fontSize: 32,
+          color: "#fff",
+          letterSpacing: 0.5,
+          lineHeight: 1.1,
+        }}>
+          Where in Goa are you staying?
+        </h2>
+        <p style={{ color: "var(--text-muted)", margin: "0 0 18px", fontSize: 14 }}>
+          We'll find the best stays near you
+        </p>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 12,
+        }}>
+          {HOTEL_AREAS.map((a) => (
+            <button
+              key={a.name}
+              onClick={() => handleAreaPick(a.name)}
+              className="glass-card"
+              style={{
+                padding: "14px 14px",
+                textAlign: "left",
+                cursor: "pointer",
+                border: "1px solid var(--border-glass)",
+                background: "rgba(15,17,25,0.7)",
+                transition: "border-color 0.18s, transform 0.18s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--neon-pink)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-glass)"; }}
+            >
+              <div style={{
+                fontFamily: "'Bebas Neue'",
+                fontSize: 24,
+                color: "#fff",
+                lineHeight: 1.1,
+                letterSpacing: 0.4,
+              }}>
+                {a.name}
+              </div>
+              <div style={{
+                color: "var(--text-muted)",
+                fontSize: 12,
+                marginTop: 4,
+                lineHeight: 1.4,
+              }}>
+                {a.subtitle}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedStayType) {
+    return (
+      <div>
+        <button
+          onClick={handleChangeArea}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--neon-cyan)",
+            cursor: "pointer",
+            fontSize: 13,
+            padding: "4px 0",
+            marginBottom: 8,
+          }}
+        >
+          ← Change area
+        </button>
+
+        <h2 style={{
+          margin: "0 0 6px",
+          fontFamily: "'Bebas Neue'",
+          fontSize: 32,
+          color: "#fff",
+          letterSpacing: 0.5,
+          lineHeight: 1.1,
+        }}>
+          What kind of stay?
+        </h2>
+        <p style={{ color: "var(--text-muted)", margin: "0 0 18px", fontSize: 14 }}>
+          Showing options near {selectedArea}
+        </p>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: 12,
+        }}>
+          {STAY_TYPES.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => handleStayTypePick(t.key)}
+              className="glass-card"
+              style={{
+                padding: "16px 14px",
+                textAlign: "left",
+                cursor: "pointer",
+                border: "1px solid var(--border-glass)",
+                background: "rgba(15,17,25,0.7)",
+                transition: "border-color 0.18s, transform 0.18s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--neon-pink)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-glass)"; }}
+            >
+              <div style={{ fontSize: 26, marginBottom: 6 }}>{t.emoji}</div>
+              <div style={{
+                fontFamily: "'Bebas Neue'",
+                fontSize: 22,
+                color: "#fff",
+                lineHeight: 1.1,
+                letterSpacing: 0.4,
+              }}>
+                {t.label}
+              </div>
+              <div style={{
+                color: "var(--text-muted)",
+                fontSize: 12,
+                marginTop: 4,
+                lineHeight: 1.4,
+              }}>
+                {t.subtitle}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleChangeArea}
+        style={{
+          background: "none",
+          border: "none",
+          color: "var(--neon-cyan)",
+          cursor: "pointer",
+          fontSize: 13,
+          padding: "4px 0",
+          marginBottom: 12,
+        }}
+      >
+        ← Change area
+      </button>
+
+      <div style={{ marginBottom: 8, color: "var(--text-muted)", fontSize: 13 }}>
+        Stays in <span style={{ color: "#fff", fontWeight: 600 }}>{selectedArea}</span>
+      </div>
+
+      <div style={{
+        display: "flex",
+        gap: 8,
+        marginBottom: 16,
+        flexWrap: "nowrap",
+        overflowX: "auto",
+        paddingBottom: 4,
+      }}>
+        {STAY_TYPES.map((t) => {
+          const active = t.key === selectedStayType;
+          return (
+            <button
+              key={t.key}
+              onClick={() => handleChangeStayType(t.key)}
+              className="category-pill"
+              style={{
+                whiteSpace: "nowrap",
+                background: active ? "rgba(255,45,120,0.18)" : "rgba(255,255,255,0.04)",
+                borderColor: active ? "var(--neon-pink)" : "var(--border-glass)",
+                color: active ? "#fff" : "var(--text-muted)",
+                fontWeight: active ? 600 : 400,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>{t.emoji}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading && <PulsingDotLoader text="Finding hotels…" />}
+
+      {!loading && error && (
+        <div style={{
+          padding: 16,
+          borderRadius: 8,
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.3)",
+          color: "#fca5a5",
+          fontSize: 14,
+          marginBottom: 12,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {!loading && fallbackMessage && (
+        <div style={{
+          background: "rgba(251,191,36,0.08)",
+          border: "1px solid rgba(251,191,36,0.3)",
+          borderRadius: 10,
+          padding: "10px 14px",
+          fontSize: 13,
+          color: "#fbbf24",
+          marginBottom: 12,
+        }}>
+          ⚠️ {fallbackMessage}
+        </div>
+      )}
+
+      {!loading && hotels && hotels.length === 0 && !error && !fallbackMessage && (
+        <div className="glass-card" style={{ padding: 30, textAlign: "center", color: "var(--text-muted)" }}>
+          No stays match this filter near {selectedArea}. Try a different stay type or area.
+        </div>
+      )}
+
+      {!loading && hotels && hotels.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {hotels.map((hotel) => (
+            <HotelCard key={hotel.place_id} hotel={hotel} stayType={selectedStayType} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,50 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 
+function ItineraryWithPhotos({ text, placePhotos }) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  // Sort place names by length DESC so longer names match first when they share a prefix
+  const placeNames = Object.keys(placePhotos).sort((a, b) => b.length - a.length);
+
+  return (
+    <div style={{ lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+      {lines.map((line, idx) => {
+        let matched = null;
+        if (line.startsWith("📍")) {
+          matched = placeNames.find((n) => line.includes(n)) || null;
+        }
+        const photos = matched ? placePhotos[matched] : null;
+        const hasPhotos = Array.isArray(photos) && photos.length > 0;
+        return (
+          <div key={idx}>
+            <div style={{ whiteSpace: "pre-wrap" }}>{line || " "}</div>
+            {hasPhotos && (
+              <div style={{ display: "flex", gap: 4, margin: "8px 0 12px" }}>
+                {photos.slice(0, 2).map((url, i) => (
+                  <img
+                    key={i}
+                    src={url}
+                    alt={matched}
+                    loading="lazy"
+                    style={{
+                      flex: 1,
+                      width: "50%",
+                      height: 140,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const PLACEHOLDERS = [
   "I'm in Calangute for 3 days, Rs 4000 budget, want beaches and good food...",
   "Staying in Morjim, 2 of us, Rs 8000, she wants chill, I want adventure...",
@@ -30,6 +74,7 @@ export default function ItineraryBuilder() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [meta, setMeta] = useState(null); // { dataSource, placesChecked, redditSourced, userArea, language, budgetMissing, buildsRemaining }
+  const [placePhotos, setPlacePhotos] = useState(null);
   const [toast, setToast] = useState(null);
   const [phIndex, setPhIndex] = useState(0);
   const [clarification, setClarification] = useState(null); // { message, areaSuggestions }
@@ -64,6 +109,7 @@ export default function ItineraryBuilder() {
     setLoading(true);
     setResult(null);
     setMeta(null);
+    setPlacePhotos(null);
     setShareId(null);
     setThanked(false);
     setBudgetTipDismissed(false);
@@ -118,6 +164,9 @@ export default function ItineraryBuilder() {
         language: data.language,
         budgetMissing: !!data.budgetMissing,
       });
+      setPlacePhotos(
+        data.placePhotos && typeof data.placePhotos === "object" ? data.placePhotos : null
+      );
       if (typeof data.buildsRemaining === "number") setBuildsRemaining(data.buildsRemaining);
 
       // analytics fire-and-forget
@@ -379,6 +428,7 @@ export default function ItineraryBuilder() {
   const handleReset = () => {
     setResult(null);
     setMeta(null);
+    setPlacePhotos(null);
     setInput("");
     setError(null);
     setShareId(null);
@@ -513,9 +563,13 @@ export default function ItineraryBuilder() {
             <Icon name="sparkles" size={18} />
             Your Personalized Goa Plan
           </h3>
-          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
-            {result}
-          </div>
+          {placePhotos && Object.keys(placePhotos).length > 0 ? (
+            <ItineraryWithPhotos text={result} placePhotos={placePhotos} />
+          ) : (
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+              {result}
+            </div>
+          )}
 
           {dataBadge && (
             <div style={{ color: dataBadge.color, fontSize: 12, marginTop: 16, textAlign: "center" }}>
