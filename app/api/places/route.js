@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { spots as fallbackSpots } from "@/lib/spotsData";
 import { calcDistanceKm, extractPriceFromReviews } from "@/lib/placeUtils";
 import {
-  fsqSearch, fsqPhotos, fsqTips,
-  fsqPriceToRange, fsqRatingTo5, fsqPassesQuality,
-  fsqOpenNow, fsqArea, fsqCoords, fsqGoogleMapsUrl,
-} from "@/lib/foursquare";
+  placesSearch, placeDetails,
+  priceLevelToRange, passesQualityFilter,
+  getOpenNow, getCoords, getMapsUrl, inferArea,
+} from "@/lib/googlePlaces";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,17 +13,16 @@ export const dynamic = "force-dynamic";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const placeCache = new Map();
 
-// Foursquare category IDs (from FSQ taxonomy)
 const CATEGORY_QUERIES = {
-  cafe:           { categories: "13032,13035",        query: "cafe" },
-  restobar:       { categories: "13003,13057,13065",  query: "restobar bar" },
-  seafood:        { categories: "13145",              query: "seafood" },
-  beach:          { categories: "16003",              query: "beach" },
-  hidden_gem:     { categories: "16019,16039,16031",  query: "viewpoint lake fort" },
-  scooter_rental: { categories: null,                 query: "scooter bike rental" },
+  cafe:           { type: "cafe",            keyword: "cafe" },
+  restobar:       { type: "restaurant",      keyword: "restobar bar" },
+  seafood:        { type: "restaurant",      keyword: "seafood fish" },
+  beach:          { type: "natural_feature", keyword: "beach" },
+  hidden_gem:     { type: "tourist_attraction", keyword: "viewpoint lake fort" },
+  scooter_rental: { type: null,              keyword: "scooter bike rental" },
 };
 
-function getCacheKey(lat, lng, category) {
+function cacheKey(lat, lng, category) {
   return `${lat.toFixed(2)}_${lng.toFixed(2)}_${category}`;
 }
 function getCached(key) {
@@ -65,42 +64,53 @@ function fallbackForCategory(category, originLat, originLng) {
     .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 }
 
-async function enrichOnePlace(apiKey, anthropicKey, place, category, originLat, originLng) {
-  const rawRating = Number(place.rating) || 0;
-  const reviewCount = Number(place.stats?.total_ratings) || 0;
-  if (!fsqPassesQuality(rawRating, reviewCount)) return null;
+async function enrichPlace(apiKey, anthropicKey, placeId, category, originLat, originLng) {
+  const d = await placeDetails(apiKey, placeId);
+  if (!d) return null;
 
-  const placeId = place.fsq_place_id || place.fsq_id;
-  if (!placeId) return null;
+  const rating = Number(d.rating) || 0;
+  const reviewCount = Number(d.user_ratings_total) || 0;
+  if (!passesQualityFilter(rating, reviewCount)) return null;
 
-  const { lat, lng } = fsqCoords(place);
+  // STRICT open check — drop closed places entirely
+  const openNow = getOpenNow(d);
+  if (openNow === false) return null;
+
+  const { lat, lng } = getCoords(d);
   if (lat == null || lng == null) return null;
 
-  // Photos + tips in parallel
-  const [photos, tips] = await Promise.all([
-    fsqPhotos(apiKey, placeId, 3),
-    fsqTips(apiKey, placeId, 5),
-  ]);
+  // Photos — use server proxy URLs so the API key stays server-side
+  const photos = Array.isArray(d.photos)
+    ? d.photos.slice(0, 3)
+        .map((p) => p.photo_reference ? `/api/photo?ref=${encodeURIComponent(p.photo_reference)}&w=800` : null)
+        .filter(Boolean)
+    : [];
 
-  const { avgPricePerPerson, confidence } = await extractPriceFromReviews(tips, anthropicKey);
+  const reviewTexts = Array.isArray(d.reviews)
+    ? d.reviews.slice(0, 5).map((r) => r.text).filter(Boolean)
+    : [];
+
+  const { avgPricePerPerson, confidence } = await extractPriceFromReviews(reviewTexts, anthropicKey);
 
   return {
-    place_id: placeId,
-    name: place.name || "",
+    place_id: d.place_id || placeId,
+    name: d.name,
     category,
-    area: fsqArea(place),
+    area: inferArea(d.formatted_address),
     lat, lng,
-    rating: fsqRatingTo5(rawRating),
+    rating,
     reviews: reviewCount,
-    priceRange: fsqPriceToRange(place.price),
+    priceRange: priceLevelToRange(d.price_level),
     avgPricePerPerson,
     priceConfidence: confidence,
-    openNow: fsqOpenNow(place),
-    description: place.description || "",
+    openNow,
+    description: d.editorial_summary?.overview || "",
     photos,
     distanceKm: calcDistanceKm(originLat, originLng, lat, lng),
-    googleMapsUrl: fsqGoogleMapsUrl(place),
-    googleReviews: tips.slice(0, 5),
+    googleMapsUrl: getMapsUrl(d),
+    googleReviews: reviewTexts.slice(0, 5),
+    phone: d.formatted_phone_number || null,
+    website: d.website || null,
   };
 }
 
@@ -108,26 +118,26 @@ async function fetchOneCategory(apiKey, anthropicKey, category, originLat, origi
   const def = CATEGORY_QUERIES[category];
   if (!def) return [];
 
-  const cacheKey = getCacheKey(originLat, originLng, category);
-  const cached = getCached(cacheKey);
+  const key = cacheKey(originLat, originLng, category);
+  const cached = getCached(key);
   if (cached) return cached;
 
-  const results = await fsqSearch(apiKey, {
+  const search = await placesSearch(apiKey, {
     lat: originLat, lng: originLng, radius,
-    query: def.query,
-    categories: def.categories,
-    sort: "DISTANCE",
-    limit: 15,
+    type: def.type, keyword: def.keyword,
+    openNowOnly: true, // server-side filter
   });
-  if (results === null) return null; // failure (caller may retry)
+  if (search === null) return null;
 
-  const top = results.slice(0, 10);
-  const enriched = await Promise.all(top.map((p) => enrichOnePlace(apiKey, anthropicKey, p, category, originLat, originLng)));
+  const top = search.slice(0, 10);
+  const enriched = await Promise.all(top.map((p) =>
+    enrichPlace(apiKey, anthropicKey, p.place_id, category, originLat, originLng)
+  ));
   const filtered = enriched.filter(Boolean).sort(
     (a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999)
   );
 
-  setCached(cacheKey, filtered);
+  setCached(key, filtered);
   return filtered;
 }
 
@@ -151,10 +161,10 @@ export async function GET(req) {
     return NextResponse.json({ error: "lat and lng required" }, { status: 400 });
   }
 
-  const fsqKey = process.env.FOURSQUARE_API_KEY;
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!fsqKey) {
+  if (!apiKey) {
     const list = fallbackForCategory(category, lat, lng);
     return NextResponse.json({ places: list }, { headers: { "X-Data-Source": "fallback" } });
   }
@@ -164,7 +174,7 @@ export async function GET(req) {
     : [category];
 
   const results = await Promise.all(
-    categoriesToFetch.map((c) => fetchWithRetry(fsqKey, anthropicKey, c, lat, lng, radius))
+    categoriesToFetch.map((c) => fetchWithRetry(apiKey, anthropicKey, c, lat, lng, radius))
   );
 
   if (results.every((r) => r === null)) {

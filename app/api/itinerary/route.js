@@ -8,11 +8,11 @@ import {
   fetchCrowdIntel,
 } from "@/lib/placeUtils";
 import {
-  fsqSearch, fsqPhotos, fsqTips,
-  fsqPriceToRange, fsqRatingTo5, fsqPassesQuality,
-  fsqOpenNow, fsqArea, fsqCoords, fsqGoogleMapsUrl,
+  placesSearch, placeDetails,
+  priceLevelToRange, passesQualityFilter,
+  getOpenNow, getCoords, getMapsUrl, inferArea,
   resolveGoaCoords, GOA_CENTER,
-} from "@/lib/foursquare";
+} from "@/lib/googlePlaces";
 import {
   getDailyBuildCount,
   getBonusBuilds,
@@ -80,48 +80,63 @@ interests: short tags like ["beaches","parties","seafood","romantic","adventure"
   }
 }
 
-async function fetchCategoryEnriched(fsqKey, anthropicKey, { lat, lng, query, categories, radius, limit }) {
-  const results = await fsqSearch(fsqKey, { lat, lng, radius, query, categories, sort: "DISTANCE", limit: Math.max(limit, 10) });
-  if (results === null) return null;
+async function fetchCategoryEnriched(apiKey, anthropicKey, { lat, lng, type, keyword, radius, limit }) {
+  // Use server-side opennow filter so closed venues never reach us
+  const search = await placesSearch(apiKey, { lat, lng, radius, type, keyword, openNowOnly: true });
+  if (search === null) return null;
 
-  const top = results.slice(0, limit);
+  const top = search.slice(0, Math.max(limit + 3, 8));
 
   const enriched = await Promise.all(top.map(async (p) => {
-    const rawRating = Number(p.rating) || 0;
-    const reviewCount = Number(p.stats?.total_ratings) || 0;
-    if (!fsqPassesQuality(rawRating, reviewCount)) return null;
-    if (fsqOpenNow(p) === false) return null;
+    const d = await placeDetails(apiKey, p.place_id);
+    if (!d) return null;
 
-    const placeId = p.fsq_place_id || p.fsq_id;
-    if (!placeId) return null;
-    const { lat: pLat, lng: pLng } = fsqCoords(p);
+    const rating = Number(d.rating) || 0;
+    const reviewCount = Number(d.user_ratings_total) || 0;
+    if (!passesQualityFilter(rating, reviewCount)) return null;
+
+    const openNow = getOpenNow(d);
+    if (openNow === false) return null;
+
+    const { lat: pLat, lng: pLng } = getCoords(d);
     if (pLat == null || pLng == null) return null;
 
-    const [photos, tips] = await Promise.all([
-      fsqPhotos(fsqKey, placeId, 3),
-      fsqTips(fsqKey, placeId, 5),
-    ]);
-    const { avgPricePerPerson } = await extractPriceFromReviews(tips, anthropicKey);
+    const photos = Array.isArray(d.photos)
+      ? d.photos.slice(0, 3)
+          .map((ph) => ph.photo_reference ? `/api/photo?ref=${encodeURIComponent(ph.photo_reference)}&w=800` : null)
+          .filter(Boolean)
+      : [];
+
+    const reviewTexts = Array.isArray(d.reviews)
+      ? d.reviews.slice(0, 5).map((r) => r.text).filter(Boolean)
+      : [];
+
+    const { avgPricePerPerson } = await extractPriceFromReviews(reviewTexts, anthropicKey);
 
     return {
-      placeId,
-      name: p.name || "",
-      rating: fsqRatingTo5(rawRating),
+      placeId: d.place_id || p.place_id,
+      name: d.name || "",
+      rating,
       reviews: reviewCount,
       lat: pLat, lng: pLng,
-      address: p.location?.formatted_address || "",
-      priceLevel: fsqPriceToRange(p.price),
+      address: d.formatted_address || "",
+      priceLevel: priceLevelToRange(d.price_level),
       avgPricePerPerson,
-      openNow: fsqOpenNow(p),
-      googleUrl: fsqGoogleMapsUrl(p),
-      description: p.description || "",
-      reviewHighlights: tips.slice(0, 2),
+      openNow,
+      googleUrl: getMapsUrl(d),
+      description: d.editorial_summary?.overview || "",
+      reviewHighlights: reviewTexts.slice(0, 2),
       distanceKm: calcDistanceKm(lat, lng, pLat, pLng),
       photos,
+      phone: d.formatted_phone_number || null,
+      website: d.website || null,
     };
   }));
 
-  return enriched.filter(Boolean).sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
+  return enriched
+    .filter(Boolean)
+    .slice(0, limit)
+    .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 }
 
 function fallbackPlaces(category, lat, lng) {
@@ -148,45 +163,48 @@ function fallbackPlaces(category, lat, lng) {
     .slice(0, 5);
 }
 
-async function buildEnrichedContext({ fsqKey, anthropicKey, supabase, area, lat, lng, interests }) {
+async function buildEnrichedContext({ apiKey, anthropicKey, supabase, area, lat, lng, interests }) {
   const categories = [
-    { key: "restaurants", query: "restaurant",       categories: "13065", radius: 8000, limit: 5, fb: "restobar" },
-    { key: "attractions", query: "tourist attraction", categories: "16000", radius: 8000, limit: 5, fb: "hidden_gem" },
+    { key: "restaurants", type: "restaurant",         keyword: "restaurant cafe",       radius: 8000,  limit: 6, fb: "restobar" },
+    { key: "attractions", type: "tourist_attraction", keyword: "tourist attraction",    radius: 8000,  limit: 6, fb: "hidden_gem" },
   ];
 
   const interestSet = new Set((interests || []).map((s) => String(s).toLowerCase()));
   const wants = (...keys) => keys.some((k) => interestSet.has(k));
 
   if (wants("party", "parties", "nightlife", "club")) {
-    categories.push({ key: "nightlife", query: "nightclub bar", categories: "13003,13003", radius: 15000, limit: 5, fb: "restobar" });
+    categories.push({ key: "nightlife",   type: "night_club",       keyword: "nightclub bar party",   radius: 15000, limit: 5, fb: "restobar" });
   }
   if (wants("beach", "beaches")) {
-    categories.push({ key: "beaches", query: "beach", categories: "16003", radius: 15000, limit: 5, fb: "beach" });
+    categories.push({ key: "beaches",     type: "natural_feature",  keyword: "beach",                 radius: 15000, limit: 5, fb: "beach" });
   }
   if (wants("adventure", "water sports", "watersports")) {
-    categories.push({ key: "waterSports", query: "water sports adventure", radius: 15000, limit: 5, fb: "hidden_gem" });
+    categories.push({ key: "waterSports", type: null,               keyword: "water sports adventure", radius: 15000, limit: 5, fb: "hidden_gem" });
   }
   if (wants("seafood")) {
-    categories.push({ key: "seafood", query: "seafood restaurant", categories: "13145", radius: 15000, limit: 5, fb: "seafood" });
+    categories.push({ key: "seafood",     type: "restaurant",       keyword: "seafood fish",          radius: 15000, limit: 5, fb: "seafood" });
   }
   if (wants("casino", "casinos")) {
-    categories.push({ key: "casinos", query: "casino", radius: 25000, limit: 5, fb: "restobar" });
+    categories.push({ key: "casinos",     type: null,               keyword: "casino",                radius: 25000, limit: 5, fb: "restobar" });
+  }
+  if (wants("romantic", "romance", "couple", "couples")) {
+    categories.push({ key: "sunsetSpots", type: "tourist_attraction", keyword: "sunset viewpoint",    radius: 12000, limit: 4, fb: "hidden_gem" });
   }
 
   let dataSource = "live";
   const fetched = {};
 
-  if (!fsqKey) {
+  if (!apiKey) {
     dataSource = "fallback";
     for (const cat of categories) {
       fetched[cat.key] = fallbackPlaces(cat.fb, lat, lng);
     }
   } else {
     const results = await Promise.all(categories.map(async (cat) => {
-      let res = await fetchCategoryEnriched(fsqKey, anthropicKey, { lat, lng, query: cat.query, categories: cat.categories, radius: cat.radius, limit: cat.limit });
+      let res = await fetchCategoryEnriched(apiKey, anthropicKey, { lat, lng, type: cat.type, keyword: cat.keyword, radius: cat.radius, limit: cat.limit });
       if (res === null) {
         await new Promise((r) => setTimeout(r, 1500));
-        res = await fetchCategoryEnriched(fsqKey, anthropicKey, { lat, lng, query: cat.query, categories: cat.categories, radius: cat.radius, limit: cat.limit });
+        res = await fetchCategoryEnriched(apiKey, anthropicKey, { lat, lng, type: cat.type, keyword: cat.keyword, radius: cat.radius, limit: cat.limit });
       }
       return { key: cat.key, data: res, fb: cat.fb };
     }));
@@ -251,115 +269,97 @@ async function buildEnrichedContext({ fsqKey, anthropicKey, supabase, area, lat,
 }
 
 function buildSystemPrompt(enrichedContext) {
-  return `You are GoaNow AI — the world's best hyper-local Goa travel planner. You build personalized day-by-day itineraries using live, verified data.
+  return `You are GoaNow AI, a senior local travel concierge in Goa. You write polished, useful, day-by-day itineraries from live, verified data — no fluff, no clichés, no hype.
 
-LANGUAGE: Always respond in English. Do not translate place names.
+LANGUAGE
+Always write in clear, professional English. Never translate place names.
 
-ABSOLUTE RULES (non-negotiable):
-1. ONLY recommend places from LIVE PLACES DATA below. Never invent a place name, address, or rating.
-2. **OPENING HOURS**: Only include a place if openNow === true OR openNow === null. If openNow === false, SKIP it entirely.
-3. **MATCH TIME OF DAY**: Match the place's typical hours to the time you slot it. Never put a brunch cafe at 11 PM or a nightclub at noon. If a place's category strongly contradicts the suggested time, drop it.
-4. **DISTANCES**: Use the EXACT distanceKm value from the data. Never round more than 0.1 km. Never guess.
-5. **NEAREST FIRST**: Within each day, sort stops by distanceKm ascending — minimise back-and-forth travel.
-6. **CROSS-VERIFY**: If two sources disagree (e.g. tip says "always packed", rating says 4.8), trust the higher-confidence source and surface the tip as a caveat.
-7. **PRICE MATH**: When avgPricePerPerson exists, use that exact value × group size × meals for the food budget. Never make up prices.
-8. **CROWD INTEL**: When bestTimeToVisit / peakCrowdTime / insiderTips exist (from Reddit + community), weave them in naturally. Phrase as "Locals say…" or "Pro tip:" — NEVER mention Reddit by name.
-9. **QUALITY**: Only recommend places with rating >= 4.0. Skip anything lower even if it's the only match.
-10. **PERSONALIZATION**: Read the user's stated vibe, group, budget, days, interests carefully. Tailor every choice. Never give a generic itinerary that could fit anyone.
-11. **HONESTY**: If the requested experience can't be fulfilled near their area (e.g. casino lover staying in Palolem = 2hr drive), say so plainly and offer a realistic alternative.
-12. **NO PLACEHOLDERS**: Never write "[restaurant name]" or "TBD". If you don't have a specific place, drop that slot.
+WRITING STYLE — STRICT
+- Plain text only. No markdown. No asterisks. No bold (**), no italics (*), no underscores. No headings with #.
+- Tasteful, sparing emoji use. At most one short emoji per heading. Avoid emoji inside body paragraphs unless it adds genuine information (a calendar, a clock).
+- Confident, conversational tone — like a friend who actually lives in Goa giving real advice. No travel-blogger gushing. No "embark on a journey", no "vibrant tapestry".
+- Sentences should sound like you actually checked the data, not generated it.
 
-LIVE PLACES DATA (fetched right now):
-${JSON.stringify(enrichedContext, null, 2)}
+DATA RULES — NON-NEGOTIABLE
+1. Recommend ONLY places that appear in LIVE PLACES DATA. Never invent a place, an address, a rating, a price, or a phone number.
+2. Skip any place where openNow is false. The data already filters most of these, but double-check before recommending.
+3. Match each place to a sensible time of day. A breakfast cafe goes in the morning, a nightclub goes after 10 PM. If a place doesn't fit the slot, drop it.
+4. Use the exact distanceKm value from the data. Round to one decimal. Never guess.
+5. Inside each day, order stops nearest-first to minimise back-and-forth travel.
+6. Only recommend places with rating >= 4.0. Skip everything below.
+7. When avgPricePerPerson exists, use it for budget math (avgPricePerPerson × group size × meals).
+8. When insiderTips exist, surface them as "Locals say…" or "Pro tip:". Never name the data source.
+9. If the user's request can't be fulfilled near their area (e.g. casino seeker in Palolem = 2hr drive each way), say so honestly and offer a realistic alternative.
+10. Never use placeholders like "[restaurant name]" or "TBD". If you have no specific place for a slot, drop the slot.
+11. If the user is vague about budget, group size, or duration, use a reasonable default and note it in one short line.
 
-ACTIVITIES NOT IN PLACES DATA — use for water sports, hidden gems, markets, casinos:
+OUTPUT FORMAT
+Write a clean structured plan. Use this exact shape, nothing else:
 
-WATER SPORTS (Baga, Calangute, Anjuna, Colva beaches):
-- Standard speedboat: ₹700–1000/person
-- Premium speedboat (open sea swim): ₹1500/person, ₹3000 for 2.
-  INSIDER: not advertised — ask boat guys for 'open sea package'
-- Parasailing: ₹1500/person (informal rate, always negotiate)
-- Jet ski 15 min: ₹500–700
-- Scuba Grande Island: ₹3500–5000/person
-- Always negotiate — quoted price ~30% above final. Best 9AM–4PM.
+Day 1 — [a short, specific subtitle, e.g. "Morjim slow morning, Vagator sunset"]
 
-FLOATING CASINOS (Panjim jetty, Mandovi River):
-- Deltin Royale: ₹3000 (₹1500 credits + unlimited food + drinks)
-- Deltin JAQK: ₹2000 (₹1000 credits + snacks)
-- Casino Pride: ₹1500
-- Open 8PM–5AM. Smart casual. No shorts at Deltin Royale.
-- SOUTH GOA WARNING: If user area is Palolem/Cavelossim/Colva, casinos are 1.5–2hrs away. Be honest.
+Morning
+[Place Name] · [X.X km away] · [rating]/5
+A short, specific paragraph (2-3 sentences) about what to do here. If bestTimeToVisit or peakCrowdTime is known, mention it naturally. If insiderTips exist, weave one in as "Locals say:" or "Pro tip:". Mention price using avgPricePerPerson if available.
+Getting there: ~[X] min by scooter, ~[X] min by auto.
 
-SCOOTER RENTALS:
-- North Goa: ₹300–400/day | Mid Goa: ₹350–450 | South: ₹400–500
-- Weekly ₹1800–2500. Always inspect bike thoroughly first.
-- Strongly recommend over autos for full-day exploration.
+Afternoon
+[Place Name] · [X.X km away] · [rating]/5
+[same shape]
+Getting there: ...
 
-HIDDEN GEMS (rarely on Foursquare — mention when relevant):
-- Sweet Water Lake, Arambol: Free, 10 min walk behind beach
-- Chapora Fort: Free, best at sunset, Dil Chahta Hai location
-- Butterfly Beach, Palolem: ₹400–600 boat each way
-- Dudhsagar Falls: ₹800–1200/person jeep safari (~4hrs from North Goa)
+Evening
+[Place Name] · [X.X km away] · [rating]/5
+[same shape]
+Getting there: ...
 
-NIGHT MARKETS:
-- Anjuna Flea Market (every Wednesday): Free entry
-- Ingó's Saturday Night Bazaar, Arpora (Saturday): Free, food ₹300–600
-- Mackie's Saturday Night Bazaar, Baga: Free
+Repeat for each day requested.
 
-PARTY INSIDER — NON-NEGOTIABLE:
-- ANY party with flyer time between 9PM–11PM: real crowd midnight.
-  ALWAYS tell user: do not arrive before 12AM.
-- Hilltop Vagator Tuesdays: legendary psy trance
-- Curlies Anjuna: free entry, real energy after 11PM
-- SinQ Candolim: entry includes drink credits, dress smart
+After the last day, output exactly this block:
 
-FOOD FALLBACK (use ONLY if no avgPricePerPerson in data):
-- Local thali/shack: ₹100–200 | Mid café: ₹300–600
-- Premium restobar: ₹800–1500 | Seafood: ₹400–800
-- Beach shack drinks: ₹150–300 each
+Estimated Budget
+Food and drinks: ₹[amount]
+Activities: ₹[amount]
+Transport: ₹[amount]
+Stay: ₹[amount, only if mentioned]
+Total: ₹[amount]
+[If user gave a budget, follow with one of:
+"Under budget by ₹[X]. Use the extra on [specific suggestion]."
+"Over budget by ₹[X]. Swap [Y] for [Z] to stay on track."]
 
-TRANSPORT:
-- Auto per km: ₹15–20. No meters in Goa. Always negotiate upfront.
-- Scooter far better than autos for full-day trips.
-- Uber available in North Goa only.
+Hidden gem
+[One specific place from the list below that's near their area, with a single line explaining why and the rough cost.]
 
-PERSONALIZATION:
-- adventure → open with water sports, end with Dudhsagar if time
-- romantic → nearest fine dining + sunset spot + casino evening
-- budget → local thalis + free beaches + forts + scooter not auto
-- party → nightlife venues + ALWAYS add midnight crowd arrival tip
-- first time → 1 iconic + 1 hidden gem + clear how-to-get-there
-- group → note group pricing, scooter fleet vs shared auto
-- solo → mention safety, solo-friendly venues
+Verify before going
+Opening hours change. Confirm by phone or Google Maps before you head out, especially for late-night spots.
 
-FORMAT — day by day:
+REFERENCE DATA — for cases where the live data doesn't cover something:
 
-Day X: [Evocative day title]
+Water sports (Baga, Calangute, Anjuna, Colva): standard speedboat ₹700-1000/person, premium "open sea" speedboat ₹1500/person (ask the boat operators directly — not advertised), parasailing ₹1500/person, jet ski ₹500-700 for 15 min, scuba at Grande Island ₹3500-5000. Negotiate; quoted is ~30% above final. Best 9 AM-4 PM.
 
-📍 [Time] — [Place Name] ([exact X.X km from user area])
-[One enthusiastic paragraph. If bestTimeToVisit known: weave in.
-If insiderTip from community: 'locals say...' or 'pro tip:'
-Travel to next: 🛵 ~[X] mins by scooter | 🚗 ~[X] mins by auto]
+Floating casinos (Panjim jetty, Mandovi River): Deltin Royale ₹3000 entry (₹1500 gaming credits + unlimited food and drinks). Deltin JAQK ₹2000. Casino Pride ₹1500. Open 8 PM-5 AM. Smart casual. If the user is in Palolem/Cavelossim/Colva, this is 1.5-2 hrs each way — be honest.
 
-END EVERY ITINERARY WITH EXACTLY:
+Scooter rentals: North Goa ₹300-400/day, Mid ₹350-450, South ₹400-500. Weekly ₹1800-2500. Inspect the bike. Strongly preferred over autos for full-day exploration.
 
-💰 ESTIMATED BUDGET BREAKDOWN
-🍽️ Food & Drinks: ₹[calculated from avgPricePerPerson × group size × meals, or fallback estimates]
-🎯 Activities: ₹[amount]
-🚗 Transport: ₹[amount]
-🏨 Stay (only if user mentioned it): ₹[amount]
-──────────────────────────────────────
-✅ Estimated Total: ₹[amount]
+Hidden gems (use one in the Hidden gem block, never invent):
+- Sweet Water Lake, Arambol — free, 10 min walk behind the beach.
+- Chapora Fort — free, best at sunset.
+- Butterfly Beach, Palolem — ₹400-600 boat each way.
+- Dudhsagar Falls — ₹800-1200/person jeep safari, ~4 hrs from North Goa.
 
-Then ONE of:
-💚 Under budget by ₹[X] — [specific suggestion for the extra]
-💡 Over by ₹[X] — skip [X] or swap for [cheaper specific alternative]
-(Omit budget comparison if budget was not provided)
+Night markets:
+- Anjuna Flea Market — Wednesdays, free.
+- Saturday Night Bazaar, Arpora — Saturdays, free, food ₹300-600.
+- Mackie's, Baga — Saturdays, free.
 
-Then:
-🌿 Hidden Gem: [one from hidden gems list, relevant to area]
+Party reality: any flyer that says 9-11 PM means the real crowd shows up around midnight. Always tell the user not to arrive before 12 AM. Hilltop Vagator (Tuesdays = psy trance), Curlies Anjuna (free entry, peaks after 11), SinQ Candolim (smart dress, drink credits at door).
 
-⚠️ Note: Open/closed status checked at time of building. Verify before visiting as hours can change.`;
+Food fallback (only if avgPricePerPerson is missing): local thali/shack ₹100-200, mid cafe ₹300-600, premium restobar ₹800-1500, seafood ₹400-800.
+
+Transport: autos ₹15-20/km, no meters — negotiate upfront. Uber works in North Goa only.
+
+LIVE PLACES DATA (fetched right now, already filtered for openNow !== false):
+${JSON.stringify(enrichedContext, null, 2)}`;
 }
 
 async function logBuilt(supabase, { email, sessionId, area, interests, durationDays, dataSource, redditSourced }) {
@@ -394,14 +394,14 @@ export async function POST(req) {
       return NextResponse.json({ error: "Tell us a bit more about your trip." }, { status: 400 });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) {
       return NextResponse.json({ error: "AI not configured on server" }, { status: 500 });
     }
 
-    const fsqKey = process.env.FOURSQUARE_API_KEY;
+    const placesKey = process.env.GOOGLE_PLACES_API_KEY;
     const supabase = getSupabaseAdmin();
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({ apiKey: anthropicKey });
 
     // STEP 0 — Daily build limit (per email, resets at midnight)
     const builtToday = email ? await getDailyBuildCount(supabase, email) : 0;
@@ -438,7 +438,7 @@ export async function POST(req) {
     const budgetMissing = budget === null;
 
     // STEP 3 — Resolve coords (hard-coded Goa areas + Nominatim fallback)
-    let coords = await resolveGoaCoords(area);
+    let coords = await resolveGoaCoords(area, placesKey);
     let geocodeFallback = false;
     if (!coords) {
       coords = { lat: GOA_CENTER.lat, lng: GOA_CENTER.lng };
@@ -448,7 +448,7 @@ export async function POST(req) {
     // STEP 4-5 — Live places + crowd intel
     const { fetched, dataSource, placesChecked, redditSourced } =
       await buildEnrichedContext({
-        fsqKey, anthropicKey: apiKey, supabase,
+        apiKey: placesKey, anthropicKey, supabase,
         area, lat: coords.lat, lng: coords.lng, interests,
       });
 

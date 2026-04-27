@@ -125,23 +125,26 @@ export default function LandingPage() {
             GoaNow
           </div>
 
-          <h1 style={{ fontSize: 30, color: "var(--neon-pink)", margin: "0 0 10px", textShadow: "0 0 20px rgba(255,61,129,0.35)", lineHeight: 1.15 }}>
-            Goa, planned right now. 🔥
+          <h1 style={{ fontSize: 28, color: "var(--neon-pink)", margin: "0 0 10px", textShadow: "0 0 20px rgba(255,61,129,0.35)", lineHeight: 1.2 }}>
+            Your Goa concierge in one tap.
           </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, lineHeight: 1.6, margin: "0 0 24px" }}>
-            Sign in with Google to see plans, pay securely, and get your Goa itinerary delivered to your inbox.
+          <p style={{ color: "#d8dce8", fontSize: 14, lineHeight: 1.6, margin: "0 0 8px" }}>
+            GoaNow is a hyper-local guide for travellers in Goa.
+          </p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.65, margin: "0 0 22px" }}>
+            Nearby cafes sorted by your real distance. Tonight's parties with crowd-arrival timing. An AI itinerary tailored to your area, vibe and budget — places verified open before they reach you.
           </p>
 
           <GoogleSignIn onUser={(u) => { if (u) setUser(u); }} />
 
-          <ul style={{ listStyle: "none", margin: "24px 0 0", padding: 0, textAlign: "left", color: "#d8dce8", fontSize: 13, lineHeight: 1.9 }}>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> No password to remember</li>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Receipts + plans go straight to your Gmail</li>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Tonight's party blast (opt-out anytime)</li>
+          <ul style={{ listStyle: "none", margin: "22px 0 0", padding: 0, textAlign: "left", color: "#d8dce8", fontSize: 13, lineHeight: 1.9 }}>
+            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> One-time pass — no subscription</li>
+            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Plan and receipts emailed to your Gmail</li>
+            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Tonight's party alerts (opt out anytime)</li>
           </ul>
 
           <p style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 22, lineHeight: 1.5 }}>
-            We use your email only for receipts, your itinerary, and party alerts. Never sold or spammed.
+            Sign in to continue. We use your email only for receipts, your itinerary, and party alerts. Never sold or spammed.
           </p>
         </div>
       </main>
@@ -170,12 +173,28 @@ export default function LandingPage() {
           </div>
 
           <h1 className="hero-title">
-            Goa, planned <span>right now.</span>
+            Welcome{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name.split(" ")[0]}` : ""}
+            <span> to GoaNow.</span>
           </h1>
 
           <p className="hero-copy">
-            Welcome{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name.split(" ")[0]}` : ""}. Pick a plan to unlock nearby spots, tonight's parties, and a personalised Goa itinerary.
+            We're a hyper-local Goa concierge. Tell us your area and your vibe and we'll hand you a plan you can actually follow — places verified open right now, real distances, real prices, real local insight.
           </p>
+
+          <div style={{ display: "grid", gap: 10, marginTop: 8, marginBottom: 14, color: "#d8dce8", fontSize: 14, lineHeight: 1.55 }}>
+            <div>
+              <span style={{ color: "var(--neon-cyan)", fontWeight: 700, marginRight: 8 }}>1.</span>
+              Pick a pass below — Day, Week or Trip. One-time payment, no subscription.
+            </div>
+            <div>
+              <span style={{ color: "var(--neon-cyan)", fontWeight: 700, marginRight: 8 }}>2.</span>
+              Tell our AI your area, days, group and budget. It builds a polished day-by-day plan.
+            </div>
+            <div>
+              <span style={{ color: "var(--neon-cyan)", fontWeight: 700, marginRight: 8 }}>3.</span>
+              Open the dashboard for nearby cafes, tonight's parties, and your saved itineraries — straight from your phone.
+            </div>
+          </div>
 
           <div className="hero-actions">
             <button onClick={() => openModal("week")} className="neon-btn">

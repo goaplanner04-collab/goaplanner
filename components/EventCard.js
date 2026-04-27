@@ -95,6 +95,29 @@ export default function EventCard({ event, distanceKm }) {
 
   return (
     <div className="glass-card event-card">
+      {event.image_url && (
+        <div style={{
+          marginTop: -16,
+          marginLeft: -16,
+          marginRight: -16,
+          marginBottom: 14,
+          width: "calc(100% + 32px)",
+          height: 200,
+          backgroundImage: `url(${event.image_url})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          borderTopLeftRadius: 14,
+          borderTopRightRadius: 14,
+          position: "relative",
+        }}>
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(180deg, rgba(7,9,14,0) 40%, rgba(7,9,14,0.65) 100%)",
+            borderTopLeftRadius: 14,
+            borderTopRightRadius: 14,
+          }} />
+        </div>
+      )}
       <div className="card-header-row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3

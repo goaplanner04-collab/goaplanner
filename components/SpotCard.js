@@ -21,11 +21,36 @@ function priceLabel(value) {
 
 export default function SpotCard({ spot, distanceKm }) {
   const icon = CATEGORY_ICON[spot.category] || "map-pin";
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`;
+  const mapsUrl = spot.googleMapsUrl || `https://www.google.com/maps/dir/?api=1&destination=${spot.lat},${spot.lng}`;
   const isScooter = spot.category === "scooter_rental";
+  const photo = Array.isArray(spot.photos) && spot.photos.length > 0 ? spot.photos[0] : null;
 
   return (
     <div className="glass-card spot-card">
+      {photo && (
+        <div style={{
+          width: "100%",
+          height: 180,
+          marginTop: -16,
+          marginLeft: -16,
+          marginRight: -16,
+          marginBottom: 12,
+          width: "calc(100% + 32px)",
+          backgroundImage: `url(${photo})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          borderTopLeftRadius: 14,
+          borderTopRightRadius: 14,
+          position: "relative",
+        }}>
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(180deg, rgba(7,9,14,0) 50%, rgba(7,9,14,0.55) 100%)",
+            borderTopLeftRadius: 14,
+            borderTopRightRadius: 14,
+          }} />
+        </div>
+      )}
       <div className="card-header-row">
         <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 0 }}>
           <span className="icon-tile" style={{ width: 42, height: 42 }}>
@@ -64,7 +89,7 @@ export default function SpotCard({ spot, distanceKm }) {
           {spot.rating}
           <span style={{ color: "var(--text-muted)" }}>({spot.reviews})</span>
         </span>
-        <span className="badge badge-grey">{priceLabel(spot.priceRange)}</span>
+        <span className="badge badge-grey">{priceLabel(spot.priceRange)}{spot.avgPricePerPerson ? ` · ~₹${spot.avgPricePerPerson}/person` : ""}</span>
         {spot.openNow ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#4ade80" }}>
             <span className="pulse-dot green" style={{ width: 7, height: 7 }} />
