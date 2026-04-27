@@ -20,22 +20,40 @@ export async function GET() {
     return NextResponse.json(result);
   }
 
-  // Test 1: Nearby Search (Vagator)
+  // Test 1: New Text Search API (Vagator cafes)
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=15.6027,73.7351&radius=5000&type=cafe&key=${apiKey}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const body = {
+      textQuery: "cafe Vagator Goa",
+      maxResultCount: 5,
+      locationBias: {
+        circle: {
+          center: { latitude: 15.6027, longitude: 73.7351 },
+          radius: 5000,
+        },
+      },
+    };
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.rating",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
     const json = await res.json();
-    result.tests.nearby_search = {
+    result.tests.text_search = {
       http_status: res.status,
-      google_status: json.status,
-      error_message: json.error_message || null,
-      result_count: Array.isArray(json.results) ? json.results.length : 0,
+      result_count: Array.isArray(json?.places) ? json.places.length : 0,
+      error: json?.error?.message || null,
+      first_place: json?.places?.[0]?.displayName?.text || null,
     };
   } catch (err) {
-    result.tests.nearby_search = { error: err?.message || "fetch failed" };
+    result.tests.text_search = { error: err?.message || "fetch failed" };
   }
 
-  // Test 2: Geocoding
+  // Test 2: Geocoding API (still old API, same key)
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=Vagator,+Goa,+India&key=${apiKey}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -50,42 +68,28 @@ export async function GET() {
     result.tests.geocoding = { error: err?.message || "fetch failed" };
   }
 
-  // Test 3: Place Details (Sublime Vagator — known place_id)
-  try {
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=ChIJDR3wuFK_vzsRyJrqx-9-Txw&fields=name,rating&key=${apiKey}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const json = await res.json();
-    result.tests.place_details = {
-      http_status: res.status,
-      google_status: json.status,
-      error_message: json.error_message || null,
-    };
-  } catch (err) {
-    result.tests.place_details = { error: err?.message || "fetch failed" };
-  }
+  // Test 3: Photo proxy (fetch photo name from first search result)
+  const firstPhotoResult = result.tests.text_search;
+  result.tests.photo_proxy = { skipped: "run text_search first — photo name needed" };
 
   // Diagnose
-  const sampleStatus = result.tests.nearby_search?.google_status;
-  const errMsg = result.tests.nearby_search?.error_message;
+  const textSearchErr = result.tests.text_search?.error;
+  const httpStatus = result.tests.text_search?.http_status;
+  const resultCount = result.tests.text_search?.result_count;
 
-  if (sampleStatus === "OK") {
-    result.diagnosis = "✅ GOOD — Google Places is responding. If you still see the fallback banner, hard-refresh the dashboard (Ctrl+Shift+R) to clear cached responses.";
-  } else if (sampleStatus === "REQUEST_DENIED") {
-    result.diagnosis = `❌ REQUEST_DENIED. Most likely causes:
-1. Places API not enabled — go to https://console.cloud.google.com/apis/library/places-backend.googleapis.com and click ENABLE.
-2. Billing not enabled — go to https://console.cloud.google.com/billing and link a billing account (Google won't charge until $200/mo free credit is exceeded).
-3. API key restricted to wrong APIs — go to your key in Credentials, set "API restrictions" to "Don't restrict key" temporarily to test.
-Google's exact error: ${errMsg || "(none provided)"}`;
-  } else if (sampleStatus === "OVER_QUERY_LIMIT") {
-    result.diagnosis = `❌ OVER_QUERY_LIMIT. You've exceeded your daily quota or hit a per-second rate limit. Check Cloud Console → APIs & Services → Quotas. Google's error: ${errMsg || ""}`;
-  } else if (sampleStatus === "ZERO_RESULTS") {
-    result.diagnosis = "ℹ️ Working but no results for the test query (unusual for Vagator). Try /api/places?lat=15.6&lng=73.7&category=cafe directly.";
-  } else if (sampleStatus === "INVALID_REQUEST") {
-    result.diagnosis = `❌ INVALID_REQUEST: ${errMsg || ""}. Bad parameters — should not happen with our code.`;
-  } else if (!sampleStatus) {
-    result.diagnosis = `❌ Network or fetch error reaching Google. The Railway server might be having connectivity problems. Error: ${result.tests.nearby_search?.error || "(unknown)"}`;
+  if (httpStatus === 200 && resultCount > 0) {
+    result.diagnosis = `✅ GOOD — New Places API is responding (found ${resultCount} results). If you still see the fallback banner, hard-refresh the dashboard (Ctrl+Shift+R).`;
+  } else if (httpStatus === 403 || (textSearchErr && textSearchErr.includes("API_KEY_INVALID"))) {
+    result.diagnosis = `❌ 403 / API key invalid. Causes:
+1. Places API (New) not enabled — go to console.cloud.google.com/apis/library and enable "Places API (New)".
+2. Key restricted to wrong APIs — temporarily set "Don't restrict key" to test.
+3. Billing not enabled — link a billing account in console.cloud.google.com/billing.`;
+  } else if (httpStatus === 200 && resultCount === 0) {
+    result.diagnosis = "ℹ️ API working but zero results for Vagator cafes (unusual). Try /api/places?lat=15.6027&lng=73.7351&category=cafe directly.";
+  } else if (!httpStatus) {
+    result.diagnosis = `❌ Network/fetch error reaching Google. The server might have connectivity issues. Error: ${textSearchErr || "(unknown)"}`;
   } else {
-    result.diagnosis = `❌ Unexpected status: ${sampleStatus}. Error message: ${errMsg || "(none)"}`;
+    result.diagnosis = `❌ Unexpected response HTTP ${httpStatus}. Error: ${textSearchErr || "(none)"}`;
   }
 
   return NextResponse.json(result);

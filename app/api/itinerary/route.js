@@ -8,9 +8,11 @@ import {
   fetchCrowdIntel,
 } from "@/lib/placeUtils";
 import {
-  placesSearch, placeDetails,
+  placesSearch,
   priceLevelToRange, passesQualityFilter,
-  getOpenNow, getCoords, getMapsUrl, inferArea,
+  getOpenNow, getCoords, getMapsUrl,
+  buildPhotoProxyUrl, getDisplayName, getEditorialSummary,
+  getReviewTexts, getPhotoNames,
   resolveGoaCoords, GOA_CENTER,
 } from "@/lib/googlePlaces";
 import {
@@ -88,56 +90,49 @@ transport: detect explicit mentions only:
   }
 }
 
+// New Places API returns full details in search results — no extra details call.
 async function fetchCategoryEnriched(apiKey, anthropicKey, { lat, lng, type, keyword, radius, limit }) {
-  // Use server-side opennow filter so closed venues never reach us
   const search = await placesSearch(apiKey, { lat, lng, radius, type, keyword, openNowOnly: true });
   if (search === null) return null;
 
   const top = search.slice(0, Math.max(limit + 3, 8));
 
   const enriched = await Promise.all(top.map(async (p) => {
-    const d = await placeDetails(apiKey, p.place_id);
-    if (!d) return null;
-
-    const rating = Number(d.rating) || 0;
-    const reviewCount = Number(d.user_ratings_total) || 0;
+    const rating = Number(p.rating) || 0;
+    const reviewCount = Number(p.userRatingCount) || 0;
     if (!passesQualityFilter(rating, reviewCount)) return null;
 
-    const openNow = getOpenNow(d);
+    const openNow = getOpenNow(p);
     if (openNow === false) return null;
 
-    const { lat: pLat, lng: pLng } = getCoords(d);
+    const { lat: pLat, lng: pLng } = getCoords(p);
     if (pLat == null || pLng == null) return null;
 
-    const photos = Array.isArray(d.photos)
-      ? d.photos.slice(0, 3)
-          .map((ph) => ph.photo_reference ? `/api/photo?ref=${encodeURIComponent(ph.photo_reference)}&w=800` : null)
-          .filter(Boolean)
-      : [];
+    const photoNames = getPhotoNames(p, 3);
+    const photos = photoNames.map((n) => buildPhotoProxyUrl(n, 800));
 
-    const reviewTexts = Array.isArray(d.reviews)
-      ? d.reviews.slice(0, 5).map((r) => r.text).filter(Boolean)
-      : [];
-
+    const reviewTexts = getReviewTexts(p).slice(0, 5);
     const { avgPricePerPerson } = await extractPriceFromReviews(reviewTexts, anthropicKey);
 
+    const placeId = (p.id || "").replace(/^places\//, "");
+
     return {
-      placeId: d.place_id || p.place_id,
-      name: d.name || "",
+      placeId,
+      name: getDisplayName(p),
       rating,
       reviews: reviewCount,
       lat: pLat, lng: pLng,
-      address: d.formatted_address || "",
-      priceLevel: priceLevelToRange(d.price_level),
+      address: p.formattedAddress || "",
+      priceLevel: priceLevelToRange(p.priceLevel),
       avgPricePerPerson,
       openNow,
-      googleUrl: getMapsUrl(d),
-      description: d.editorial_summary?.overview || "",
+      googleUrl: getMapsUrl(p),
+      description: getEditorialSummary(p),
       reviewHighlights: reviewTexts.slice(0, 2),
       distanceKm: calcDistanceKm(lat, lng, pLat, pLng),
       photos,
-      phone: d.formatted_phone_number || null,
-      website: d.website || null,
+      phone: p.nationalPhoneNumber || null,
+      website: p.websiteUri || null,
     };
   }));
 

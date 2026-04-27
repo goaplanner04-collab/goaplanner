@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { spots as fallbackSpots } from "@/lib/spotsData";
 import { calcDistanceKm, extractPriceFromReviews } from "@/lib/placeUtils";
 import {
-  placesSearch, placeDetails,
+  placesSearch,
   priceLevelToRange, passesQualityFilter,
   getOpenNow, getCoords, getMapsUrl, inferArea,
+  buildPhotoProxyUrl, getDisplayName, getEditorialSummary,
+  getReviewTexts, getPhotoNames,
 } from "@/lib/googlePlaces";
 
 export const runtime = "nodejs";
@@ -64,53 +66,46 @@ function fallbackForCategory(category, originLat, originLng) {
     .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 }
 
-async function enrichPlace(apiKey, anthropicKey, placeId, category, originLat, originLng) {
-  const d = await placeDetails(apiKey, placeId);
-  if (!d) return null;
-
-  const rating = Number(d.rating) || 0;
-  const reviewCount = Number(d.user_ratings_total) || 0;
+// New Places API returns full details in search results — no extra details call needed.
+async function enrichPlace(anthropicKey, place, category, originLat, originLng) {
+  const rating = Number(place.rating) || 0;
+  const reviewCount = Number(place.userRatingCount) || 0;
   if (!passesQualityFilter(rating, reviewCount)) return null;
 
-  // STRICT open check — drop closed places entirely
-  const openNow = getOpenNow(d);
+  const openNow = getOpenNow(place);
   if (openNow === false) return null;
 
-  const { lat, lng } = getCoords(d);
+  const { lat, lng } = getCoords(place);
   if (lat == null || lng == null) return null;
 
-  // Photos — use server proxy URLs so the API key stays server-side
-  const photos = Array.isArray(d.photos)
-    ? d.photos.slice(0, 3)
-        .map((p) => p.photo_reference ? `/api/photo?ref=${encodeURIComponent(p.photo_reference)}&w=800` : null)
-        .filter(Boolean)
-    : [];
+  const photoNames = getPhotoNames(place, 3);
+  const photos = photoNames.map((n) => buildPhotoProxyUrl(n, 800));
 
-  const reviewTexts = Array.isArray(d.reviews)
-    ? d.reviews.slice(0, 5).map((r) => r.text).filter(Boolean)
-    : [];
-
+  const reviewTexts = getReviewTexts(place).slice(0, 5);
   const { avgPricePerPerson, confidence } = await extractPriceFromReviews(reviewTexts, anthropicKey);
 
+  const placeId = place.id || "";
+  const cleanId = placeId.replace(/^places\//, "");
+
   return {
-    place_id: d.place_id || placeId,
-    name: d.name,
+    place_id: cleanId || placeId,
+    name: getDisplayName(place),
     category,
-    area: inferArea(d.formatted_address),
+    area: inferArea(place.formattedAddress),
     lat, lng,
     rating,
     reviews: reviewCount,
-    priceRange: priceLevelToRange(d.price_level),
+    priceRange: priceLevelToRange(place.priceLevel),
     avgPricePerPerson,
     priceConfidence: confidence,
     openNow,
-    description: d.editorial_summary?.overview || "",
+    description: getEditorialSummary(place),
     photos,
     distanceKm: calcDistanceKm(originLat, originLng, lat, lng),
-    googleMapsUrl: getMapsUrl(d),
-    googleReviews: reviewTexts.slice(0, 5),
-    phone: d.formatted_phone_number || null,
-    website: d.website || null,
+    googleMapsUrl: getMapsUrl(place),
+    googleReviews: reviewTexts,
+    phone: place.nationalPhoneNumber || null,
+    website: place.websiteUri || null,
   };
 }
 
@@ -125,14 +120,14 @@ async function fetchOneCategory(apiKey, anthropicKey, category, originLat, origi
   const search = await placesSearch(apiKey, {
     lat: originLat, lng: originLng, radius,
     type: def.type, keyword: def.keyword,
-    openNowOnly: true, // server-side filter
+    openNowOnly: true,
   });
   if (search === null) return null;
 
   const top = search.slice(0, 10);
-  const enriched = await Promise.all(top.map((p) =>
-    enrichPlace(apiKey, anthropicKey, p.place_id, category, originLat, originLng)
-  ));
+  const enriched = await Promise.all(
+    top.map((p) => enrichPlace(anthropicKey, p, category, originLat, originLng))
+  );
   const filtered = enriched.filter(Boolean).sort(
     (a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999)
   );
