@@ -93,7 +93,12 @@ export default function ItineraryBuilder() {
         return;
       }
       if (data.needsClarification) {
-        setClarification({ message: data.message, areaSuggestions: data.areaSuggestions || [] });
+        setClarification({
+          type: data.clarificationType || "area",
+          message: data.message,
+          areaSuggestions: data.areaSuggestions || [],
+          transportOptions: data.transportOptions || [],
+        });
         if (typeof data.buildsRemaining === "number") setBuildsRemaining(data.buildsRemaining);
         setLoading(false);
         return;
@@ -147,6 +152,20 @@ export default function ItineraryBuilder() {
 
   const handleAreaPick = (area) => {
     const newText = input.trim() + (input.trim() ? " · " : "") + `Staying in ${area}`;
+    setInput(newText);
+    setClarification(null);
+    submitWithText(newText);
+  };
+
+  const handleTransportPick = (option) => {
+    const phrase = option.value === "none"
+      ? "I don't have my own vehicle, will use autos"
+      : option.value === "scooter"
+      ? "I have a scooter"
+      : option.value === "car"
+      ? "I have a car"
+      : "I have a motorcycle";
+    const newText = input.trim() + (input.trim() ? " · " : "") + phrase;
     setInput(newText);
     setClarification(null);
     submitWithText(newText);
@@ -435,21 +454,42 @@ export default function ItineraryBuilder() {
       {clarification && (
         <div className="glass-card" style={{ padding: 18 }}>
           <p style={{ margin: "0 0 12px", color: "#fff", lineHeight: 1.55 }}>{clarification.message}</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-            {clarification.areaSuggestions.map((a) => (
-              <button
-                key={a}
-                onClick={() => handleAreaPick(a)}
-                className="neon-btn-ghost"
-                style={{
-                  fontSize: 13, padding: "8px 14px", minHeight: 36, whiteSpace: "nowrap",
-                  borderColor: "rgba(0,245,255,0.5)", color: "var(--neon-cyan)",
-                }}
-              >
-                📍 {a}
-              </button>
-            ))}
-          </div>
+
+          {clarification.type === "transport" && clarification.transportOptions?.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+              {clarification.transportOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleTransportPick(opt)}
+                  className="neon-btn-ghost"
+                  style={{
+                    fontSize: 13, padding: "12px 14px", minHeight: 56,
+                    textAlign: "left", display: "flex", alignItems: "center", gap: 10,
+                    borderColor: "rgba(0,245,255,0.5)", color: "#fff", lineHeight: 1.3,
+                  }}
+                >
+                  <span style={{ fontSize: 22 }}>{opt.emoji}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+              {clarification.areaSuggestions.map((a) => (
+                <button
+                  key={a}
+                  onClick={() => handleAreaPick(a)}
+                  className="neon-btn-ghost"
+                  style={{
+                    fontSize: 13, padding: "8px 14px", minHeight: 36, whiteSpace: "nowrap",
+                    borderColor: "rgba(0,245,255,0.5)", color: "var(--neon-cyan)",
+                  }}
+                >
+                  📍 {a}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

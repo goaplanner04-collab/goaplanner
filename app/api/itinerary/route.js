@@ -58,16 +58,24 @@ async function parseUserInput(client, message) {
   try {
     const res = await client.messages.create({
       model: HAIKU,
-      max_tokens: 250,
+      max_tokens: 320,
       system: `Extract Goa travel details from a user message. Return ONLY JSON, no markdown:
 { "area": string|null, "budget": number|null, "duration_days": number|null,
   "group_type": "solo"|"couple"|"group"|"family"|"unknown",
-  "interests": string[], "isVague": boolean }
+  "interests": string[], "isVague": boolean,
+  "transport": "scooter"|"car"|"bike"|"none"|"unknown" }
 
 isVague = true if area is just "north goa", "south goa", "goa", or no specific town/village.
 area should be a specific Goa town/village name when possible (e.g. "Vagator", "Palolem").
 budget in INR per person for the whole trip if stated, else null.
-interests: short tags like ["beaches","parties","seafood","romantic","adventure","budget","casinos","first time"].`,
+interests: short tags like ["beaches","parties","seafood","romantic","adventure","budget","casinos","first time"].
+
+transport: detect explicit mentions only:
+- "scooter" / "moped" / "rented a scooter" → "scooter"
+- "car" / "rented a car" / "self-drive" → "car"
+- "bike" / "motorcycle" → "bike"
+- "no vehicle" / "without a vehicle" / "rely on autos" / "by auto" / "on foot" → "none"
+- otherwise → "unknown"`,
       messages: [{ role: "user", content: message }],
     });
     const text = (res.content || [])
@@ -293,6 +301,13 @@ DATA RULES — NON-NEGOTIABLE
 10. Never use placeholders like "[restaurant name]" or "TBD". If you have no specific place for a slot, drop the slot.
 11. If the user is vague about budget, group size, or duration, use a reasonable default and note it in one short line.
 
+USER TRANSPORT
+The user's transport mode is in userTransport in the live data. Tailor every "Getting there" line to it:
+- "scooter" → "Getting there: ~[X] min by scooter. Park near [landmark if relevant]." Mention parking when it's known to be hard (Anjuna market days, peak Baga, Old Goa church area).
+- "car" → "Getting there: ~[X] min by car. [Note any parking constraint]." Suggest paid parking lots when narrow streets are an issue (Fontainhas, Old Goa, Panjim center).
+- "bike" → same as scooter, add "easy bike parking" note when relevant.
+- "none" → "Getting there: ~[X] min by auto, approx ₹[fare based on ₹15-20/km × distance]. Or ~[X] min by Uber if in North Goa." For stretches > 10 km, suggest renting a scooter for the day instead and explain why (cheaper, more flexible). For ferries (Chorao, Divar) note schedules. For airport pickups/long transfers note Uber works at the airport.
+
 OUTPUT FORMAT
 Write a clean structured plan. Use this exact shape, nothing else:
 
@@ -301,19 +316,21 @@ Day 1 — [a short, specific subtitle, e.g. "Morjim slow morning, Vagator sunset
 Morning
 [Place Name] · [X.X km away] · [rating]/5
 A short, specific paragraph (2-3 sentences) about what to do here. If bestTimeToVisit or peakCrowdTime is known, mention it naturally. If insiderTips exist, weave one in as "Locals say:" or "Pro tip:". Mention price using avgPricePerPerson if available.
-Getting there: ~[X] min by scooter, ~[X] min by auto.
+Getting there: [transport-specific guidance per the rules above]
 
 Afternoon
 [Place Name] · [X.X km away] · [rating]/5
 [same shape]
-Getting there: ...
+Getting there: [transport-specific]
 
 Evening
 [Place Name] · [X.X km away] · [rating]/5
 [same shape]
-Getting there: ...
+Getting there: [transport-specific]
 
 Repeat for each day requested.
+
+If userTransport is "none" and any single stop is more than 12 km from another, add a one-line "Transport tip:" suggesting they rent a scooter for the day with a price estimate.
 
 After the last day, output exactly this block:
 
@@ -421,6 +438,7 @@ export async function POST(req) {
     const parsed = await parseUserInput(client, message);
     const area = parsed?.area?.trim() || null;
     const budget = Number.isFinite(Number(parsed?.budget)) ? Number(parsed.budget) : null;
+    const transport = ["scooter", "car", "bike", "none"].includes(parsed?.transport) ? parsed.transport : "unknown";
     const durationDays = Number.isFinite(Number(parsed?.duration_days)) ? Number(parsed.duration_days) : null;
     const groupType = parsed?.group_type || "unknown";
     const interests = Array.isArray(parsed?.interests) ? parsed.interests : [];
@@ -429,8 +447,25 @@ export async function POST(req) {
     if (isVague) {
       return NextResponse.json({
         needsClarification: true,
+        clarificationType: "area",
         message: "North Goa is huge — that's 50km of coastline! Tell us your exact area for accurate distances and recommendations.",
         areaSuggestions: AREA_SUGGESTIONS,
+        buildsRemaining: Math.max(0, totalAllowedToday - builtToday),
+      });
+    }
+
+    // Ask about transport so we can plan distances + suggest the right mode
+    if (transport === "unknown") {
+      return NextResponse.json({
+        needsClarification: true,
+        clarificationType: "transport",
+        message: "Quick question — how are you getting around in Goa? It changes the plan a lot.",
+        transportOptions: [
+          { value: "scooter", label: "I have / will rent a scooter", emoji: "🛵" },
+          { value: "car",     label: "I have / will rent a car",     emoji: "🚗" },
+          { value: "bike",    label: "I have a motorcycle",          emoji: "🏍️" },
+          { value: "none",    label: "No vehicle — autos / taxis",   emoji: "🚖" },
+        ],
         buildsRemaining: Math.max(0, totalAllowedToday - builtToday),
       });
     }
@@ -456,18 +491,25 @@ export async function POST(req) {
       userArea: area,
       userLat: coords.lat,
       userLng: coords.lng,
+      userTransport: transport,
       dataSource,
       ...fetched,
     };
 
     const systemPrompt = buildSystemPrompt(modelContext);
-    const userMsg = `Original: ${message}
+    const userMsg = `Original message: ${message}
 
-Parsed: Area: ${area} (${coords.lat}, ${coords.lng}) | Budget: ₹${budget ?? "not specified"} | Duration: ${durationDays ?? "?"} days | Group: ${groupType} | Interests: ${interests.join(", ") || "general"}
-${budgetMissing ? "| Budget not specified — used ₹3000/person/day estimate" : ""}
-${geocodeFallback ? "| Note: Area geocoding fell back to Goa center" : ""}
+Parsed details:
+- Area: ${area} (${coords.lat}, ${coords.lng})
+- Budget: ₹${budget ?? "not specified"}
+- Duration: ${durationDays ?? "?"} days
+- Group: ${groupType}
+- Interests: ${interests.join(", ") || "general"}
+- Transport: ${transport}
+${budgetMissing ? "- Budget not specified — using ₹3000/person/day estimate" : ""}
+${geocodeFallback ? "- Note: Area geocoding fell back to Goa center" : ""}
 
-Build using ONLY live places above. Exact distances. Open places only.`;
+Build using ONLY live places above. Exact distances. Open places only. For each stop, give the user a concrete way to get there based on their transport mode.`;
 
     const completion = await client.messages.create({
       model: SONNET,

@@ -119,6 +119,9 @@ function NearbyTab() {
   const [areaInput, setAreaInput] = useState("");
   const [category, setCategory] = useState("all");
   const [sortMode, setSortMode] = useState("distance");
+  const [livePlaces, setLivePlaces] = useState(null);
+  const [placesLoading, setPlacesLoading] = useState(false);
+  const [dataSource, setDataSource] = useState(null); // "live" | "partial" | "fallback"
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -136,6 +139,28 @@ function NearbyTab() {
     );
   }, []);
 
+  // Fetch live places from /api/places whenever coords or category change
+  useEffect(() => {
+    if (!coords) return;
+    setPlacesLoading(true);
+    const url = `/api/places?lat=${coords.lat}&lng=${coords.lng}&category=${category}&radius=10000`;
+    fetch(url)
+      .then(async (r) => {
+        const headerSource = r.headers.get("X-Data-Source") || "live";
+        const data = await r.json();
+        return { data, headerSource };
+      })
+      .then(({ data, headerSource }) => {
+        setLivePlaces(Array.isArray(data?.places) ? data.places : []);
+        setDataSource(headerSource);
+      })
+      .catch(() => {
+        setLivePlaces([]);
+        setDataSource("fallback");
+      })
+      .finally(() => setPlacesLoading(false));
+  }, [coords, category]);
+
   const handleAreaSubmit = (e) => {
     e.preventDefault();
     const key = areaInput.trim().toLowerCase();
@@ -145,19 +170,30 @@ function NearbyTab() {
   };
 
   const list = useMemo(() => {
-    let arr = spots.slice();
-    if (category !== "all") arr = arr.filter((spot) => spot.category === category);
-    arr = arr.map((spot) => ({
-      ...spot,
-      distance: coords ? getDistanceKm(coords.lat, coords.lng, spot.lat, spot.lng) : null,
-    }));
+    // Prefer live data when available, fall back to spotsData
+    let arr;
+    if (livePlaces && livePlaces.length > 0) {
+      arr = livePlaces.map((p) => ({
+        ...p,
+        id: p.place_id,
+        distance: p.distanceKm,
+      }));
+    } else {
+      arr = spots.slice().map((s) => ({ ...s, photos: [] }));
+      if (category !== "all") arr = arr.filter((spot) => spot.category === category);
+      arr = arr.map((spot) => ({
+        ...spot,
+        distance: coords ? getDistanceKm(coords.lat, coords.lng, spot.lat, spot.lng) : null,
+      }));
+    }
+
     if (sortMode === "distance" && coords) {
       arr.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     } else {
-      arr.sort((a, b) => b.rating - a.rating);
+      arr.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     }
     return arr;
-  }, [category, coords, sortMode]);
+  }, [category, coords, sortMode, livePlaces]);
 
   if (locStatus === "loading") {
     return <PulsingDotLoader text="Finding spots near you..." />;
@@ -210,6 +246,33 @@ function NearbyTab() {
         </div>
       )}
 
+      {dataSource === "fallback" && (
+        <div style={{
+          background: "rgba(251,191,36,0.08)",
+          border: "1px solid rgba(251,191,36,0.3)",
+          borderRadius: 10,
+          padding: "8px 12px",
+          fontSize: 12,
+          color: "#fbbf24",
+          marginBottom: 12,
+        }}>
+          ⚠️ Live Google data unavailable — showing curated spots. Photos and live opening hours may be missing.
+        </div>
+      )}
+      {dataSource === "partial" && (
+        <div style={{
+          background: "rgba(251,191,36,0.06)",
+          border: "1px solid rgba(251,191,36,0.2)",
+          borderRadius: 10,
+          padding: "8px 12px",
+          fontSize: 12,
+          color: "#9aa3b2",
+          marginBottom: 12,
+        }}>
+          ⚡ Some categories used saved data — most are live.
+        </div>
+      )}
+
       <CategoryFilter active={category} onChange={setCategory} />
 
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
@@ -224,7 +287,9 @@ function NearbyTab() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {list.length === 0 ? (
+        {placesLoading ? (
+          <PulsingDotLoader text="Pulling live spots from Google…" />
+        ) : list.length === 0 ? (
           <div className="glass-card" style={{ padding: 30, textAlign: "center", color: "var(--text-muted)" }}>
             No spots match this filter. Try another category.
           </div>
