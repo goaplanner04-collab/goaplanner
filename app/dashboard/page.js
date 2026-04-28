@@ -63,11 +63,11 @@ const HOTEL_AREAS = [
 ];
 
 const STAY_TYPES = [
-  { key: "beachside_resort", emoji: "🏖️", label: "Beachside Resort", subtitle: "Wake up steps from the beach" },
-  { key: "hotel",            emoji: "🏨", label: "Hotel",             subtitle: "Comfortable, all amenities" },
-  { key: "boutique_villa",   emoji: "🌿", label: "Boutique / Villa",  subtitle: "Intimate, unique, Insta-worthy" },
-  { key: "hostel",           emoji: "🎒", label: "Hostel / Zostel",   subtitle: "Budget-friendly, meet travelers" },
-  { key: "guesthouse",       emoji: "🏡", label: "Guesthouse",        subtitle: "Local, homely, affordable" },
+  { key: "beachside_resort", emoji: "🏖️", label: "Beachside Resort", subtitle: "Wake up steps from the beach",    gradient: "linear-gradient(135deg,#0077b6 0%,#00b4d8 55%,#0096c7 100%)", price: "₹3,000–₹18,000/night", icon: "wave" },
+  { key: "hotel",            emoji: "🏨", label: "Hotel",             subtitle: "Comfortable, all amenities",      gradient: "linear-gradient(135deg,#0d1b2a 0%,#1e3a5f 55%,#152238 100%)", price: "₹1,500–₹8,000/night",  icon: "building" },
+  { key: "boutique_villa",   emoji: "🌿", label: "Boutique / Villa",  subtitle: "Intimate, unique, Insta-worthy",  gradient: "linear-gradient(135deg,#78350f 0%,#d97706 55%,#92400e 100%)", price: "₹4,000–₹25,000/night", icon: "arch" },
+  { key: "hostel",           emoji: "🎒", label: "Hostel / Zostel",   subtitle: "Budget-friendly, meet travelers", gradient: "linear-gradient(135deg,#064e3b 0%,#059669 55%,#065f46 100%)", price: "₹400–₹1,500/night",    icon: "tent" },
+  { key: "guesthouse",       emoji: "🏡", label: "Guesthouse",        subtitle: "Local, homely, affordable",       gradient: "linear-gradient(135deg,#3b0764 0%,#7c3aed 55%,#4c1d95 100%)", price: "₹800–₹3,500/night",    icon: "house" },
 ];
 
 export default function DashboardPage() {
@@ -331,6 +331,50 @@ function NearbyTab() {
   );
 }
 
+function StayTypeIcon({ name }) {
+  if (name === "wave") return (
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <circle cx="17" cy="13" r="5" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
+      <path d="M3 24c3.5-3 6.5-3 9 0s5.5 3 9 0 5.5-3 9 0" stroke="rgba(255,255,255,0.9)" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M3 29c3.5-3 6.5-3 9 0s5.5 3 9 0 5.5-3 9 0" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+  if (name === "building") return (
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <rect x="7" y="6" width="20" height="24" rx="1.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
+      <rect x="11" y="11" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
+      <rect x="19" y="11" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
+      <rect x="11" y="19" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
+      <rect x="19" y="19" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
+      <rect x="14" y="26" width="6" height="4" rx="0.5" fill="rgba(255,255,255,0.5)"/>
+    </svg>
+  );
+  if (name === "arch") return (
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <path d="M7 30V18C7 12.477 11.477 8 17 8s10 4.477 10 10v12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M5 30h24" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
+      <path d="M14 30v-8a3 3 0 016 0v8" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  );
+  if (name === "tent") return (
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <path d="M3 30L17 6l14 24H3z" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinejoin="round"/>
+      <path d="M17 6v24" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M12 30v-9l5-5 5 5v9" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinejoin="round"/>
+    </svg>
+  );
+  if (name === "house") return (
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+      <path d="M4 17L17 5l13 12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <rect x="7" y="17" width="20" height="13" rx="1" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
+      <rect x="14" y="23" width="6" height="7" rx="0.5" fill="rgba(255,255,255,0.5)"/>
+      <rect x="9" y="20" width="4.5" height="4.5" rx="0.5" fill="rgba(255,255,255,0.5)"/>
+      <rect x="20.5" y="20" width="4.5" height="4.5" rx="0.5" fill="rgba(255,255,255,0.5)"/>
+    </svg>
+  );
+  return null;
+}
+
 function HotelsTab() {
   const [selectedArea, setSelectedArea] = useState(null);
   const [selectedStayType, setSelectedStayType] = useState(null);
@@ -462,58 +506,104 @@ function HotelsTab() {
           ← Change area
         </button>
 
-        <h2 style={{
-          margin: "0 0 6px",
-          fontFamily: "'Bebas Neue'",
-          fontSize: 32,
-          color: "#fff",
-          letterSpacing: 0.5,
-          lineHeight: 1.1,
-        }}>
-          What kind of stay?
-        </h2>
-        <p style={{ color: "var(--text-muted)", margin: "0 0 18px", fontSize: 14 }}>
-          Showing options near {selectedArea}
-        </p>
+        <div style={{ marginBottom: 20 }}>
+          <h2 style={{
+            margin: 0,
+            fontFamily: "'Bebas Neue'",
+            fontSize: 32,
+            color: "#fff",
+            letterSpacing: 0.5,
+            lineHeight: 1.1,
+          }}>
+            What kind of stay?
+          </h2>
+          <div style={{
+            width: 44,
+            height: 3,
+            background: "var(--neon-pink)",
+            borderRadius: 2,
+            marginTop: 6,
+            marginBottom: 8,
+          }} />
+          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: 14 }}>
+            Showing options near {selectedArea}
+          </p>
+        </div>
 
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 12,
+          gap: 14,
         }}>
           {STAY_TYPES.map((t) => (
             <button
               key={t.key}
               onClick={() => handleStayTypePick(t.key)}
-              className="glass-card"
               style={{
-                padding: "16px 14px",
-                textAlign: "left",
+                position: "relative",
+                height: 168,
+                borderRadius: 16,
+                overflow: "hidden",
                 cursor: "pointer",
-                border: "1px solid var(--border-glass)",
-                background: "rgba(15,17,25,0.7)",
-                transition: "border-color 0.18s, transform 0.18s",
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: t.gradient,
+                transition: "transform 0.22s ease, filter 0.22s ease, box-shadow 0.22s ease",
+                textAlign: "left",
+                padding: 0,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--neon-pink)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-glass)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-4px)";
+                e.currentTarget.style.filter = "brightness(1.08)";
+                e.currentTarget.style.boxShadow = "0 14px 36px rgba(0,0,0,0.45)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.filter = "brightness(1)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
             >
-              <div style={{ fontSize: 26, marginBottom: 6 }}>{t.emoji}</div>
               <div style={{
-                fontFamily: "'Bebas Neue'",
-                fontSize: 22,
-                color: "#fff",
-                lineHeight: 1.1,
-                letterSpacing: 0.4,
-              }}>
-                {t.label}
+                position: "absolute",
+                left: 0, right: 0, bottom: 0,
+                height: "65%",
+                background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.7))",
+                pointerEvents: "none",
+              }} />
+              <div style={{ position: "absolute", top: 14, left: 14 }}>
+                <StayTypeIcon name={t.icon} />
               </div>
-              <div style={{
-                color: "var(--text-muted)",
-                fontSize: 12,
-                marginTop: 4,
-                lineHeight: 1.4,
-              }}>
-                {t.subtitle}
+              <div style={{ position: "absolute", left: 14, right: 14, bottom: 12 }}>
+                <div style={{
+                  fontFamily: "'Bebas Neue'",
+                  fontSize: 22,
+                  color: "#fff",
+                  lineHeight: 1.1,
+                  letterSpacing: 0.5,
+                }}>
+                  {t.label}
+                </div>
+                <div style={{
+                  color: "rgba(255,255,255,0.72)",
+                  fontSize: 11,
+                  marginTop: 3,
+                  lineHeight: 1.35,
+                }}>
+                  {t.subtitle}
+                </div>
+                <div style={{
+                  display: "inline-block",
+                  marginTop: 6,
+                  background: "rgba(255,255,255,0.18)",
+                  borderRadius: 20,
+                  padding: "2px 9px",
+                  fontSize: 10,
+                  color: "rgba(255,255,255,0.92)",
+                  fontWeight: 500,
+                  backdropFilter: "blur(4px)",
+                  WebkitBackdropFilter: "blur(4px)",
+                }}>
+                  {t.price}
+                </div>
               </div>
             </button>
           ))}
