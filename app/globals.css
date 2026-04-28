@@ -294,6 +294,12 @@ a {
   100% { background-position: -200% 0; }
 }
 
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .tip-box {
   background: rgba(255, 215, 0, 0.05);
   border-left: 3px solid var(--neon-gold);
@@ -575,7 +581,7 @@ a {
   margin: 0 auto;
   padding: 10px 16px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 

@@ -4,23 +4,32 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Icon from "@/components/Icon";
-import CategoryFilter from "@/components/CategoryFilter";
 import SpotCard from "@/components/SpotCard";
 import EventCard from "@/components/EventCard";
-import HotelCard from "@/components/HotelCard";
 import ItineraryBuilder from "@/components/ItineraryBuilder";
 import LoadingSkeleton, { PulsingDotLoader } from "@/components/LoadingSkeleton";
 import ShareButton from "@/components/ShareButton";
-import { spots } from "@/lib/spotsData";
 import { getDistanceKm } from "@/lib/haversine";
 import { getSavedTheme, applyTheme } from "@/lib/theme";
 
 const TABS = [
-  { key: "nearby", label: "Nearby", icon: "map-pin" },
-  { key: "hotels", label: "🏨 Hotels", icon: null },
-  { key: "events", label: "Parties", icon: "music" },
-  { key: "ai", label: "AI Plan", icon: "route" },
+  { key: "nearby", label: "📍 Nearby", icon: null },
+  { key: "events", label: "🎉 Parties", icon: null },
+  { key: "ai", label: "🗺️ AI Plan", icon: null },
   { key: "settings", label: "⚙️ Settings", icon: null },
+];
+
+const NEARBY_CATEGORIES = [
+  { key: "featured",        label: "For You",          emoji: "✨" },
+  { key: "rentals",         label: "Rentals",           emoji: "🛵" },
+  { key: "stay",            label: "Stay",              emoji: "🏨" },
+  { key: "breakfast_cafes", label: "Breakfast & Cafes", emoji: "☕" },
+  { key: "beaches",         label: "Beaches",           emoji: "🏖️" },
+  { key: "tourist_spots",   label: "Tourist Spots",     emoji: "🛕" },
+  { key: "water_sports",    label: "Water Sports",      emoji: "🌊" },
+  { key: "restobars",       label: "Restobars",         emoji: "🍹" },
+  { key: "seafood",         label: "Seafood",           emoji: "🦞" },
+  { key: "hidden_gems",     label: "Hidden Gems",       emoji: "🌿" },
 ];
 
 const GOA_CENTER = { lat: 15.2993, lng: 74.1240 };
@@ -44,31 +53,7 @@ const AREAS_FALLBACK = {
   ashvem: { lat: 15.6531, lng: 73.7128 },
 };
 
-const HOTEL_AREAS = [
-  { name: "Morjim",      subtitle: "Quiet beach, turtle nesting" },
-  { name: "Arambol",     subtitle: "Boho vibes, hippie paradise" },
-  { name: "Mandrem",     subtitle: "Most peaceful beach in Goa" },
-  { name: "Vagator",     subtitle: "Party scene, cliff views" },
-  { name: "Anjuna",      subtitle: "Flea market, nightlife" },
-  { name: "Calangute",   subtitle: "Most popular, lively" },
-  { name: "Baga",        subtitle: "Restaurants, watersports" },
-  { name: "Candolim",    subtitle: "Calm, upscale" },
-  { name: "Panjim",      subtitle: "Capital city, heritage" },
-  { name: "Assagao",     subtitle: "Boutique cafes, peaceful" },
-  { name: "Palolem",     subtitle: "South Goa, beautiful bay" },
-  { name: "Cavelossim",  subtitle: "South Goa, luxury resorts" },
-  { name: "Colva",       subtitle: "South Goa, long beach" },
-  { name: "Benaulim",    subtitle: "South Goa, quiet" },
-  { name: "Margao",      subtitle: "South Goa, city center" },
-];
 
-const STAY_TYPES = [
-  { key: "beachside_resort", emoji: "🏖️", label: "Beachside Resort", subtitle: "Wake up steps from the beach",    gradient: "linear-gradient(135deg,#0077b6 0%,#00b4d8 55%,#0096c7 100%)", price: "₹3,000–₹18,000/night", icon: "wave" },
-  { key: "hotel",            emoji: "🏨", label: "Hotel",             subtitle: "Comfortable, all amenities",      gradient: "linear-gradient(135deg,#0d1b2a 0%,#1e3a5f 55%,#152238 100%)", price: "₹1,500–₹8,000/night",  icon: "building" },
-  { key: "boutique_villa",   emoji: "🌿", label: "Boutique / Villa",  subtitle: "Intimate, unique, Insta-worthy",  gradient: "linear-gradient(135deg,#78350f 0%,#d97706 55%,#92400e 100%)", price: "₹4,000–₹25,000/night", icon: "arch" },
-  { key: "hostel",           emoji: "🎒", label: "Hostel / Zostel",   subtitle: "Budget-friendly, meet travelers", gradient: "linear-gradient(135deg,#064e3b 0%,#059669 55%,#065f46 100%)", price: "₹400–₹1,500/night",    icon: "tent" },
-  { key: "guesthouse",       emoji: "🏡", label: "Guesthouse",        subtitle: "Local, homely, affordable",       gradient: "linear-gradient(135deg,#3b0764 0%,#7c3aed 55%,#4c1d95 100%)", price: "₹800–₹3,500/night",    icon: "house" },
-];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -134,7 +119,6 @@ export default function DashboardPage() {
 
       <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 14px" }} className="animate-fadeUp">
         {tab === "nearby" && <NearbyTab />}
-        {tab === "hotels" && <HotelsTab />}
         {tab === "events" && <EventsTab />}
         {tab === "ai" && <ItineraryBuilder />}
         {tab === "settings" && <SettingsTab />}
@@ -145,15 +129,25 @@ export default function DashboardPage() {
   );
 }
 
+function getDefaultSort(category) {
+  if (["beaches", "tourist_spots", "hidden_gems", "water_sports"].includes(category)) return "rating";
+  return "distance";
+}
+
+function showSortToggle(category) {
+  return !["featured", "water_sports"].includes(category);
+}
+
 function NearbyTab() {
   const [coords, setCoords] = useState(null);
   const [locStatus, setLocStatus] = useState("loading");
   const [areaInput, setAreaInput] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState("featured");
   const [sortMode, setSortMode] = useState("distance");
   const [livePlaces, setLivePlaces] = useState(null);
   const [placesLoading, setPlacesLoading] = useState(false);
   const [dataSource, setDataSource] = useState(null);
+  const [heroVisible, setHeroVisible] = useState(true);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -172,9 +166,14 @@ function NearbyTab() {
   }, []);
 
   useEffect(() => {
+    setSortMode(getDefaultSort(category) === "rating" ? "rating" : "distance");
+  }, [category]);
+
+  useEffect(() => {
     if (!coords) return;
     setPlacesLoading(true);
-    const url = `/api/places?lat=${coords.lat}&lng=${coords.lng}&category=${category}&radius=10000`;
+    setLivePlaces(null);
+    const url = `/api/places?lat=${coords.lat}&lng=${coords.lng}&category=${category}`;
     fetch(url)
       .then(async (r) => {
         const headerSource = r.headers.get("X-Data-Source") || "live";
@@ -184,10 +183,12 @@ function NearbyTab() {
       .then(({ data, headerSource }) => {
         setLivePlaces(Array.isArray(data?.places) ? data.places : []);
         setDataSource(headerSource);
+        setHeroVisible(false);
       })
       .catch(() => {
         setLivePlaces([]);
         setDataSource("fallback");
+        setHeroVisible(false);
       })
       .finally(() => setPlacesLoading(false));
   }, [coords, category]);
@@ -200,34 +201,47 @@ function NearbyTab() {
     setLocStatus("manual");
   };
 
-  const list = useMemo(() => {
-    let arr;
-    if (livePlaces && livePlaces.length > 0) {
-      arr = livePlaces.map((p) => ({
-        ...p,
-        id: p.place_id,
-        distance: p.distanceKm,
-      }));
-    } else {
-      arr = spots.slice().map((s) => ({ ...s, photos: [] }));
-      if (category !== "all") arr = arr.filter((spot) => spot.category === category);
-      arr = arr.map((spot) => ({
-        ...spot,
-        distance: coords ? getDistanceKm(coords.lat, coords.lng, spot.lat, spot.lng) : null,
-      }));
-    }
-
-    if (sortMode === "distance" && coords) {
-      arr.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-    } else {
+  const sorted = useMemo(() => {
+    if (!livePlaces) return [];
+    const arr = livePlaces.map((p) => ({ ...p, id: p.place_id || p.id }));
+    if (sortMode === "rating") {
       arr.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    } else {
+      arr.sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
     }
     return arr;
-  }, [category, coords, sortMode, livePlaces]);
+  }, [livePlaces, sortMode]);
+
+  const grouped = useMemo(() => {
+    if (category !== "tourist_spots" || !sorted.length) return null;
+    const groups = [
+      { key: "religious", label: "Churches & Temples", items: [] },
+      { key: "heritage",  label: "Forts & Heritage",   items: [] },
+      { key: "nature",    label: "Nature & Treks",      items: [] },
+      { key: "other",     label: "Attractions",         items: [] },
+    ];
+    for (const spot of sorted) {
+      const lower = (spot.name || "").toLowerCase();
+      if (lower.includes("church") || lower.includes("chapel") || lower.includes("temple") || lower.includes("mosque") || lower.includes("cathedral")) {
+        groups[0].items.push(spot);
+      } else if (lower.includes("fort") || lower.includes("heritage") || lower.includes("museum") || lower.includes("palace")) {
+        groups[1].items.push(spot);
+      } else if (lower.includes("trek") || lower.includes("viewpoint") || lower.includes("waterfall") || lower.includes("falls") || lower.includes("lake")) {
+        groups[2].items.push(spot);
+      } else {
+        groups[3].items.push(spot);
+      }
+    }
+    return groups.filter((g) => g.items.length > 0);
+  }, [category, sorted]);
 
   if (locStatus === "loading") {
     return <PulsingDotLoader text="Finding spots near you..." />;
   }
+
+  const isFeatured = category === "featured";
+  const showSort = showSortToggle(category);
+  const activeCat = NEARBY_CATEGORIES.find((c) => c.key === category);
 
   return (
     <div>
@@ -252,10 +266,7 @@ function NearbyTab() {
           </form>
           <button
             type="button"
-            onClick={() => {
-              setCoords(GOA_CENTER);
-              setLocStatus("manual");
-            }}
+            onClick={() => { setCoords(GOA_CENTER); setLocStatus("manual"); }}
             className="neon-btn-ghost mobile-full"
             style={{ marginTop: 10, fontSize: 12, padding: "6px 12px", minHeight: 34 }}
           >
@@ -277,438 +288,123 @@ function NearbyTab() {
       )}
 
       {dataSource === "fallback" && (
-        <div style={{
-          background: "rgba(251,191,36,0.08)",
-          border: "1px solid rgba(251,191,36,0.3)",
-          borderRadius: 10,
-          padding: "8px 12px",
-          fontSize: 12,
-          color: "#fbbf24",
-          marginBottom: 12,
-        }}>
+        <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#fbbf24", marginBottom: 12 }}>
           ⚠️ Live Google data unavailable — showing curated spots. Photos and live opening hours may be missing.
         </div>
       )}
-      {dataSource === "partial" && (
+
+      {/* Hero banner — visible while featured is loading for the first time */}
+      {isFeatured && (heroVisible || placesLoading) && (
         <div style={{
-          background: "rgba(251,191,36,0.06)",
-          border: "1px solid rgba(251,191,36,0.2)",
-          borderRadius: 10,
-          padding: "8px 12px",
-          fontSize: 12,
-          color: "#9aa3b2",
-          marginBottom: 12,
+          width: "100%",
+          height: 120,
+          borderRadius: 12,
+          background: "linear-gradient(135deg, #FF2D78, #FF6B6B, #00F5FF, #FF2D78)",
+          backgroundSize: "300% 300%",
+          animation: "gradientShift 4s ease infinite",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 14,
+          opacity: heroVisible ? 1 : 0,
+          transition: "opacity 0.5s ease",
+          pointerEvents: "none",
         }}>
-          ⚡ Some categories used saved data — most are live.
+          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: "#fff", letterSpacing: 0.5 }}>
+            🌴 What&apos;s good near you in Goa?
+          </div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
+            Live spots pulled from Google Maps
+          </div>
         </div>
       )}
 
-      <CategoryFilter active={category} onChange={setCategory} />
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-        <button
-          onClick={() => setSortMode((mode) => (mode === "distance" ? "rating" : "distance"))}
-          className="category-pill"
-          style={{ background: "rgba(51,214,200,0.08)", borderColor: "rgba(51,214,200,0.3)", color: "var(--neon-cyan)" }}
-        >
-          <Icon name={sortMode === "distance" ? "map-pin" : "star"} size={15} />
-          {sortMode === "distance" ? "Nearest First" : "Top Rated"}
-        </button>
+      {/* Category filter pills */}
+      <div
+        className="hide-scrollbar"
+        style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", WebkitOverflowScrolling: "touch" }}
+      >
+        {NEARBY_CATEGORIES.map((cat) => (
+          <button
+            key={cat.key}
+            onClick={() => setCategory(cat.key)}
+            className={"category-pill" + (category === cat.key ? " active" : "")}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {cat.emoji} {cat.label}
+          </button>
+        ))}
       </div>
 
+      {/* Sort toggle */}
+      {showSort && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+          <button
+            onClick={() => setSortMode((m) => (m === "distance" ? "rating" : "distance"))}
+            className="category-pill"
+            style={{ background: "rgba(51,214,200,0.08)", borderColor: "rgba(51,214,200,0.3)", color: "var(--neon-cyan)" }}
+          >
+            <Icon name={sortMode === "distance" ? "map-pin" : "star"} size={15} />
+            {sortMode === "distance" ? "Nearest First" : "Top Rated"}
+          </button>
+        </div>
+      )}
+
+      {/* Section header for non-featured categories */}
+      {!isFeatured && activeCat && !placesLoading && sorted.length > 0 && (
+        <div style={{
+          fontFamily: "'Bebas Neue'",
+          fontSize: 18,
+          color: "var(--text-muted)",
+          marginBottom: 12,
+        }}>
+          {activeCat.emoji} {activeCat.label} near you ({sorted.length} found)
+        </div>
+      )}
+
+      {/* Results */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {placesLoading ? (
-          <PulsingDotLoader text="Pulling live spots from Google…" />
-        ) : list.length === 0 ? (
+          <>
+            <LoadingSkeleton height={200} />
+            <LoadingSkeleton height={200} />
+            <LoadingSkeleton height={200} />
+          </>
+        ) : sorted.length === 0 && !placesLoading ? (
           <div className="glass-card" style={{ padding: 30, textAlign: "center", color: "var(--text-muted)" }}>
-            No spots match this filter. Try another category.
+            No spots found for this category. Try another one.
           </div>
+        ) : category === "tourist_spots" && grouped ? (
+          grouped.map((group) => (
+            <div key={group.key}>
+              <div style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: 13,
+                color: "var(--neon-cyan)",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                margin: "16px 0 8px",
+              }}>
+                {group.label}
+              </div>
+              {group.items.map((spot) => (
+                <div key={spot.id || spot.place_id} style={{ marginBottom: 14 }}>
+                  <SpotCard spot={spot} distanceKm={spot.distanceKm} />
+                </div>
+              ))}
+            </div>
+          ))
         ) : (
-          list.map((spot) => <SpotCard key={spot.id} spot={spot} distanceKm={spot.distance} />)
+          sorted.map((spot) => (
+            <SpotCard key={spot.id || spot.place_id} spot={spot} distanceKm={spot.distanceKm} />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function StayTypeIcon({ name }) {
-  if (name === "wave") return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <circle cx="17" cy="13" r="5" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
-      <path d="M3 24c3.5-3 6.5-3 9 0s5.5 3 9 0 5.5-3 9 0" stroke="rgba(255,255,255,0.9)" strokeWidth="2.2" strokeLinecap="round"/>
-      <path d="M3 29c3.5-3 6.5-3 9 0s5.5 3 9 0 5.5-3 9 0" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  );
-  if (name === "building") return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <rect x="7" y="6" width="20" height="24" rx="1.5" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
-      <rect x="11" y="11" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
-      <rect x="19" y="11" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
-      <rect x="11" y="19" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
-      <rect x="19" y="19" width="4" height="4" rx="0.5" fill="rgba(255,255,255,0.7)"/>
-      <rect x="14" y="26" width="6" height="4" rx="0.5" fill="rgba(255,255,255,0.5)"/>
-    </svg>
-  );
-  if (name === "arch") return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <path d="M7 30V18C7 12.477 11.477 8 17 8s10 4.477 10 10v12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M5 30h24" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round"/>
-      <path d="M14 30v-8a3 3 0 016 0v8" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  );
-  if (name === "tent") return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <path d="M3 30L17 6l14 24H3z" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinejoin="round"/>
-      <path d="M17 6v24" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M12 30v-9l5-5 5 5v9" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinejoin="round"/>
-    </svg>
-  );
-  if (name === "house") return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <path d="M4 17L17 5l13 12" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <rect x="7" y="17" width="20" height="13" rx="1" stroke="rgba(255,255,255,0.9)" strokeWidth="2"/>
-      <rect x="14" y="23" width="6" height="7" rx="0.5" fill="rgba(255,255,255,0.5)"/>
-      <rect x="9" y="20" width="4.5" height="4.5" rx="0.5" fill="rgba(255,255,255,0.5)"/>
-      <rect x="20.5" y="20" width="4.5" height="4.5" rx="0.5" fill="rgba(255,255,255,0.5)"/>
-    </svg>
-  );
-  return null;
-}
-
-function HotelsTab() {
-  const [selectedArea, setSelectedArea] = useState(null);
-  const [selectedStayType, setSelectedStayType] = useState(null);
-  const [hotels, setHotels] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [fallbackMessage, setFallbackMessage] = useState(null);
-
-  useEffect(() => {
-    if (!selectedArea || !selectedStayType) return;
-    setLoading(true);
-    setError(null);
-    setFallbackMessage(null);
-    const url = `/api/hotels?area=${encodeURIComponent(selectedArea)}&stayType=${encodeURIComponent(selectedStayType)}&radius=5000`;
-    fetch(url)
-      .then(async (r) => {
-        const headerSource = r.headers.get("X-Data-Source") || "live";
-        const data = await r.json();
-        return { data, headerSource };
-      })
-      .then(({ data, headerSource }) => {
-        setHotels(Array.isArray(data?.hotels) ? data.hotels : []);
-        if (headerSource === "fallback" && data?.message) {
-          setFallbackMessage(data.message);
-        }
-      })
-      .catch(() => {
-        setHotels([]);
-        setError("Couldn't load hotels. Check your connection and try again.");
-      })
-      .finally(() => setLoading(false));
-  }, [selectedArea, selectedStayType]);
-
-  const handleAreaPick = (area) => {
-    setSelectedArea(area);
-    setSelectedStayType(null);
-    setHotels(null);
-  };
-  const handleStayTypePick = (stayType) => {
-    setSelectedStayType(stayType);
-  };
-  const handleChangeArea = () => {
-    setSelectedArea(null);
-    setSelectedStayType(null);
-    setHotels(null);
-  };
-  const handleChangeStayType = (newType) => {
-    setSelectedStayType(newType);
-    setHotels(null);
-  };
-
-  if (!selectedArea) {
-    return (
-      <div>
-        <h2 style={{
-          margin: "8px 0 6px",
-          fontFamily: "'Bebas Neue'",
-          fontSize: 32,
-          color: "#fff",
-          letterSpacing: 0.5,
-          lineHeight: 1.1,
-        }}>
-          Where in Goa are you staying?
-        </h2>
-        <p style={{ color: "var(--text-muted)", margin: "0 0 18px", fontSize: 14 }}>
-          We'll find the best stays near you
-        </p>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 12,
-        }}>
-          {HOTEL_AREAS.map((a) => (
-            <button
-              key={a.name}
-              onClick={() => handleAreaPick(a.name)}
-              className="glass-card"
-              style={{
-                padding: "14px 14px",
-                textAlign: "left",
-                cursor: "pointer",
-                border: "1px solid var(--border-glass)",
-                background: "rgba(15,17,25,0.7)",
-                transition: "border-color 0.18s, transform 0.18s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--neon-pink)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-glass)"; }}
-            >
-              <div style={{
-                fontFamily: "'Bebas Neue'",
-                fontSize: 24,
-                color: "#fff",
-                lineHeight: 1.1,
-                letterSpacing: 0.4,
-              }}>
-                {a.name}
-              </div>
-              <div style={{
-                color: "var(--text-muted)",
-                fontSize: 12,
-                marginTop: 4,
-                lineHeight: 1.4,
-              }}>
-                {a.subtitle}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!selectedStayType) {
-    return (
-      <div>
-        <button
-          onClick={handleChangeArea}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--neon-cyan)",
-            cursor: "pointer",
-            fontSize: 13,
-            padding: "4px 0",
-            marginBottom: 8,
-          }}
-        >
-          ← Change area
-        </button>
-
-        <div style={{ marginBottom: 20 }}>
-          <h2 style={{
-            margin: 0,
-            fontFamily: "'Bebas Neue'",
-            fontSize: 32,
-            color: "#fff",
-            letterSpacing: 0.5,
-            lineHeight: 1.1,
-          }}>
-            What kind of stay?
-          </h2>
-          <div style={{
-            width: 44,
-            height: 3,
-            background: "var(--neon-pink)",
-            borderRadius: 2,
-            marginTop: 6,
-            marginBottom: 8,
-          }} />
-          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: 14 }}>
-            Showing options near {selectedArea}
-          </p>
-        </div>
-
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 14,
-        }}>
-          {STAY_TYPES.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => handleStayTypePick(t.key)}
-              style={{
-                position: "relative",
-                height: 168,
-                borderRadius: 16,
-                overflow: "hidden",
-                cursor: "pointer",
-                border: "1px solid rgba(255,255,255,0.1)",
-                background: t.gradient,
-                transition: "transform 0.22s ease, filter 0.22s ease, box-shadow 0.22s ease",
-                textAlign: "left",
-                padding: 0,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-4px)";
-                e.currentTarget.style.filter = "brightness(1.08)";
-                e.currentTarget.style.boxShadow = "0 14px 36px rgba(0,0,0,0.45)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.filter = "brightness(1)";
-                e.currentTarget.style.boxShadow = "none";
-              }}
-            >
-              <div style={{
-                position: "absolute",
-                left: 0, right: 0, bottom: 0,
-                height: "65%",
-                background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.7))",
-                pointerEvents: "none",
-              }} />
-              <div style={{ position: "absolute", top: 14, left: 14 }}>
-                <StayTypeIcon name={t.icon} />
-              </div>
-              <div style={{ position: "absolute", left: 14, right: 14, bottom: 12 }}>
-                <div style={{
-                  fontFamily: "'Bebas Neue'",
-                  fontSize: 22,
-                  color: "#fff",
-                  lineHeight: 1.1,
-                  letterSpacing: 0.5,
-                }}>
-                  {t.label}
-                </div>
-                <div style={{
-                  color: "rgba(255,255,255,0.72)",
-                  fontSize: 11,
-                  marginTop: 3,
-                  lineHeight: 1.35,
-                }}>
-                  {t.subtitle}
-                </div>
-                <div style={{
-                  display: "inline-block",
-                  marginTop: 6,
-                  background: "rgba(255,255,255,0.18)",
-                  borderRadius: 20,
-                  padding: "2px 9px",
-                  fontSize: 10,
-                  color: "rgba(255,255,255,0.92)",
-                  fontWeight: 500,
-                  backdropFilter: "blur(4px)",
-                  WebkitBackdropFilter: "blur(4px)",
-                }}>
-                  {t.price}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <button
-        onClick={handleChangeArea}
-        style={{
-          background: "none",
-          border: "none",
-          color: "var(--neon-cyan)",
-          cursor: "pointer",
-          fontSize: 13,
-          padding: "4px 0",
-          marginBottom: 12,
-        }}
-      >
-        ← Change area
-      </button>
-
-      <div style={{ marginBottom: 8, color: "var(--text-muted)", fontSize: 13 }}>
-        Stays in <span style={{ color: "#fff", fontWeight: 600 }}>{selectedArea}</span>
-      </div>
-
-      <div style={{
-        display: "flex",
-        gap: 8,
-        marginBottom: 16,
-        flexWrap: "nowrap",
-        overflowX: "auto",
-        paddingBottom: 4,
-      }}>
-        {STAY_TYPES.map((t) => {
-          const active = t.key === selectedStayType;
-          return (
-            <button
-              key={t.key}
-              onClick={() => handleChangeStayType(t.key)}
-              className="category-pill"
-              style={{
-                whiteSpace: "nowrap",
-                background: active ? "rgba(255,45,120,0.18)" : "rgba(255,255,255,0.04)",
-                borderColor: active ? "var(--neon-pink)" : "var(--border-glass)",
-                color: active ? "#fff" : "var(--text-muted)",
-                fontWeight: active ? 600 : 400,
-              }}
-            >
-              <span style={{ fontSize: 16 }}>{t.emoji}</span>
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {loading && <PulsingDotLoader text="Finding hotels…" />}
-
-      {!loading && error && (
-        <div style={{
-          padding: 16,
-          borderRadius: 8,
-          background: "rgba(239,68,68,0.08)",
-          border: "1px solid rgba(239,68,68,0.3)",
-          color: "#fca5a5",
-          fontSize: 14,
-          marginBottom: 12,
-        }}>
-          {error}
-        </div>
-      )}
-
-      {!loading && fallbackMessage && (
-        <div style={{
-          background: "rgba(251,191,36,0.08)",
-          border: "1px solid rgba(251,191,36,0.3)",
-          borderRadius: 10,
-          padding: "10px 14px",
-          fontSize: 13,
-          color: "#fbbf24",
-          marginBottom: 12,
-        }}>
-          ⚠️ {fallbackMessage}
-        </div>
-      )}
-
-      {!loading && hotels && hotels.length === 0 && !error && !fallbackMessage && (
-        <div className="glass-card" style={{ padding: 30, textAlign: "center", color: "var(--text-muted)" }}>
-          No stays match this filter near {selectedArea}. Try a different stay type or area.
-        </div>
-      )}
-
-      {!loading && hotels && hotels.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {hotels.map((hotel) => (
-            <HotelCard key={hotel.place_id} hotel={hotel} stayType={selectedStayType} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function EventsTab() {
   const [events, setEvents] = useState(null);
