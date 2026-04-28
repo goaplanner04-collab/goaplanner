@@ -223,16 +223,14 @@ export default function SpotCard({ spot, distanceKm }) {
           <Icon name="directions" size={17} />
           Directions
         </a>
-        {isRental && (
+        {isRental && spot.phone && (
           <a
-            href={`https://wa.me/?text=${encodeURIComponent(`Hi, I want to rent a scooter from ${spot.name} (${spot.area}, Goa).`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`tel:${spot.phone}`}
             className="neon-btn-ghost mobile-full"
             style={{ flex: 1, minWidth: 150, textAlign: "center", padding: "10px 14px", fontSize: 14 }}
           >
             <Icon name="phone" size={17} />
-            Call / WhatsApp
+            Call
           </a>
         )}
       </div>
