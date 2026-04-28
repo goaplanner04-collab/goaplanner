@@ -129,6 +129,49 @@ export default function DashboardPage() {
   );
 }
 
+function NearbyPill({ catKey, emoji, label, active, setCategory, forYou }) {
+  const isActive = active === catKey;
+  return (
+    <button
+      onClick={() => setCategory(catKey)}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: forYou ? "center" : undefined,
+        gap: 6,
+        padding: forYou ? "10px 14px" : "8px 14px",
+        borderRadius: 20,
+        fontFamily: forYou ? "'Bebas Neue'" : "Inter, sans-serif",
+        fontSize: forYou ? 16 : 13,
+        letterSpacing: forYou ? "0.05em" : undefined,
+        fontWeight: 500,
+        cursor: "pointer",
+        border: `1px solid ${isActive ? "var(--neon-pink)" : "var(--border-glass)"}`,
+        background: isActive ? "var(--neon-pink)" : "var(--bg-card)",
+        color: isActive ? "#fff" : "var(--text-primary)",
+        boxShadow: isActive ? "0 0 12px rgba(255,45,120,0.4)" : "none",
+        margin: forYou ? "0 0 8px 0" : "4px 6px 4px 0",
+        width: forYou ? "100%" : undefined,
+        whiteSpace: "nowrap",
+        minHeight: 36,
+        transition: "all 0.2s ease",
+      }}
+      onMouseEnter={(e) => {
+        if (isActive) return;
+        e.currentTarget.style.borderColor = "var(--neon-pink)";
+        e.currentTarget.style.color = "var(--neon-pink)";
+      }}
+      onMouseLeave={(e) => {
+        if (isActive) return;
+        e.currentTarget.style.borderColor = "var(--border-glass)";
+        e.currentTarget.style.color = "var(--text-primary)";
+      }}
+    >
+      {emoji} {label}
+    </button>
+  );
+}
+
 function getDefaultSort(category) {
   if (["beaches", "tourist_spots", "hidden_gems", "water_sports"].includes(category)) return "rating";
   return "distance";
@@ -320,21 +363,39 @@ function NearbyTab() {
         </div>
       )}
 
-      {/* Category filter pills */}
-      <div
-        className="hide-scrollbar"
-        style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0 12px", WebkitOverflowScrolling: "touch" }}
-      >
-        {NEARBY_CATEGORIES.map((cat) => (
-          <button
-            key={cat.key}
-            onClick={() => setCategory(cat.key)}
-            className={"category-pill" + (category === cat.key ? " active" : "")}
-            style={{ whiteSpace: "nowrap" }}
-          >
-            {cat.emoji} {cat.label}
-          </button>
-        ))}
+      {/* Category filter — grouped rows */}
+      <div style={{ padding: "0 0 12px 0", borderBottom: "1px solid var(--border-glass)", marginBottom: 16 }}>
+        {/* For You — full-width pill */}
+        <NearbyPill catKey="featured" emoji="✨" label="For You" active={category} setCategory={setCategory} forYou />
+
+        {/* Essentials */}
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text-muted)", margin: "12px 0 6px 0" }}>Essentials</span>
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <NearbyPill catKey="rentals"  emoji="🛵" label="Rentals" active={category} setCategory={setCategory} />
+          <NearbyPill catKey="stay"     emoji="🏨" label="Stay"    active={category} setCategory={setCategory} />
+        </div>
+
+        {/* Eat & Drink */}
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text-muted)", margin: "12px 0 6px 0" }}>Eat &amp; Drink</span>
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <NearbyPill catKey="breakfast_cafes" emoji="☕" label="Cafes"     active={category} setCategory={setCategory} />
+          <NearbyPill catKey="restobars"        emoji="🍹" label="Restobars" active={category} setCategory={setCategory} />
+          <NearbyPill catKey="seafood"          emoji="🦞" label="Seafood"   active={category} setCategory={setCategory} />
+        </div>
+
+        {/* Explore */}
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text-muted)", margin: "12px 0 6px 0" }}>Explore</span>
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <NearbyPill catKey="beaches"       emoji="🏖️" label="Beaches"       active={category} setCategory={setCategory} />
+          <NearbyPill catKey="tourist_spots" emoji="🛕" label="Tourist Spots" active={category} setCategory={setCategory} />
+          <NearbyPill catKey="hidden_gems"   emoji="🌿" label="Hidden Gems"   active={category} setCategory={setCategory} />
+        </div>
+
+        {/* Activities */}
+        <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text-muted)", margin: "12px 0 6px 0" }}>Activities</span>
+        <div style={{ display: "flex", flexWrap: "wrap" }}>
+          <NearbyPill catKey="water_sports" emoji="🌊" label="Water Sports" active={category} setCategory={setCategory} />
+        </div>
       </div>
 
       {/* Sort toggle */}
