@@ -5,7 +5,7 @@ import Icon from "@/components/Icon";
 
 const DEFAULT_PLANS = {
   day: { key: "day", name: "Day Pass", price: 49, paise: 4900, duration_ms: 86400000, label: "24 hours" },
-  week: { key: "week", name: "Week Pass", price: 99, paise: 9900, duration_ms: 604800000, label: "7 days", popular: true },
+  week: { key: "week", name: "Week Pass", price: 8, paise: 800, duration_ms: 604800000, label: "7 days", popular: true },
   trip: { key: "trip", name: "Trip Pass", price: 149, paise: 14900, duration_ms: 2592000000, label: "30 days" },
 };
 

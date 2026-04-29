@@ -8,7 +8,7 @@ import { getBrowserSupabase } from "@/lib/supabaseBrowser";
 
 const DEFAULT_PLANS = [
   { key: "day", name: "Day Pass", price: 49, duration: "24 hours" },
-  { key: "week", name: "Week Pass", price: 99, duration: "7 days", popular: true },
+  { key: "week", name: "Week Pass", price: 8, duration: "7 days", popular: true },
   { key: "trip", name: "Trip Pass", price: 149, duration: "30 days" },
 ];
 
@@ -199,7 +199,7 @@ export default function LandingPage() {
           <div className="hero-actions">
             <button onClick={() => openModal("week")} className="neon-btn">
               <Icon name="ticket" size={18} />
-              Get Access for Rs 99
+              Get Access for Rs 8
               <Icon name="arrow-right" size={18} />
             </button>
             <a href="#pricing" className="neon-btn-ghost">
