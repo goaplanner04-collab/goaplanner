@@ -169,15 +169,14 @@ export default function PaywallModal({ open, onClose, initialPlan = "week", pref
         return;
       }
 
-      const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      // Key comes from the server that created the order — guaranteed match.
+      const keyId = orderData.keyId;
       if (!keyId) {
         setError("Payment not configured — key missing. Contact support.");
         setProcessing(false);
         return;
       }
-      // Log key prefix so we can confirm live vs test in browser console
-      console.log("[GoaNow] Razorpay key prefix:", keyId.slice(0, 12));
-      console.log("[GoaNow] Order ID:", orderData.orderId);
+      console.log("[GoaNow] key prefix:", keyId.slice(0, 12), "| order:", orderData.orderId);
 
       const options = {
         key: keyId,

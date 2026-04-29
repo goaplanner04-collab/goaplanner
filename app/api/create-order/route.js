@@ -37,7 +37,7 @@ export async function POST(req) {
       }
     });
 
-    return NextResponse.json({ orderId: order.id, amount: order.amount });
+    return NextResponse.json({ orderId: order.id, amount: order.amount, keyId });
   } catch (err) {
     console.error("create-order error", err);
     return NextResponse.json(
