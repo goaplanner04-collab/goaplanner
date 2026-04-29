@@ -40,13 +40,16 @@ const EMPTY_EVENT = {
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
+  const [username, setUsername] = useState("");
   const [pwd, setPwd] = useState("");
   const [authError, setAuthError] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [adminUser, setAdminUser] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (sessionStorage.getItem("admin_auth") === "true") {
+      setAdminUser(sessionStorage.getItem("admin_user") || "");
       setAuthed(true);
     }
   }, []);
@@ -59,17 +62,18 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd })
+        body: JSON.stringify({ username, password: pwd }),
       });
       const data = await res.json();
       if (data.success) {
         sessionStorage.setItem("admin_auth", "true");
-        sessionStorage.setItem("admin_pwd", pwd);
+        sessionStorage.setItem("admin_user", data.user);
+        setAdminUser(data.user);
         setAuthed(true);
       } else {
-        setAuthError("Wrong password");
+        setAuthError(data.error || "Wrong credentials");
       }
-    } catch (e) {
+    } catch {
       setAuthError("Login failed. Try again.");
     } finally {
       setAuthLoading(false);
@@ -85,7 +89,7 @@ export default function AdminPage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 20
+          padding: 20,
         }}
       >
         <form onSubmit={handleLogin} className="glass-card" style={{ padding: 30, width: "100%", maxWidth: 380 }}>
@@ -94,26 +98,43 @@ export default function AdminPage() {
               margin: "0 0 6px",
               color: "var(--neon-pink)",
               fontSize: 38,
-              textShadow: "0 0 16px rgba(255,45,120,0.5)"
+              textShadow: "0 0 16px rgba(255,45,120,0.5)",
             }}
           >
             🔐 Admin
           </h1>
-          <p style={{ color: "var(--text-muted)", margin: "0 0 18px", fontSize: 14 }}>
-            Enter the admin password to manage events.
+          <p style={{ color: "var(--text-muted)", margin: "0 0 20px", fontSize: 14 }}>
+            Sign in to manage GoaNow events and users.
           </p>
+
+          <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 6, letterSpacing: "0.04em" }}>
+            USERNAME
+          </label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Your name"
+            className="input-field"
+            autoComplete="username"
+            autoFocus
+            style={{ marginBottom: 14 }}
+          />
+
+          <label style={{ display: "block", color: "var(--text-muted)", fontSize: 12, marginBottom: 6, letterSpacing: "0.04em" }}>
+            PASSWORD
+          </label>
           <input
             type="password"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            placeholder="Password"
+            placeholder="Enter your password"
             className="input-field"
-            autoFocus
           />
           {authError && (
             <div style={{ color: "#fca5a5", fontSize: 13, marginTop: 10 }}>{authError}</div>
           )}
-          <button type="submit" disabled={authLoading} className="neon-btn" style={{ width: "100%", marginTop: 16 }}>
+          <button type="submit" disabled={authLoading || !pwd || !username.trim()} className="neon-btn" style={{ width: "100%", marginTop: 16 }}>
             {authLoading ? "Checking..." : "Enter"}
           </button>
         </form>
@@ -121,14 +142,15 @@ export default function AdminPage() {
     );
   }
 
-  return <AdminDashboard onLogout={() => {
+  return <AdminDashboard adminUser={adminUser} onLogout={() => {
     sessionStorage.removeItem("admin_auth");
-    sessionStorage.removeItem("admin_pwd");
+    sessionStorage.removeItem("admin_user");
+    setAdminUser("");
     setAuthed(false);
   }} />;
 }
 
-function AdminDashboard({ onLogout }) {
+function AdminDashboard({ onLogout, adminUser }) {
   const [event, setEvent] = useState(EMPTY_EVENT);
   const [aiFilled, setAiFilled] = useState({}); // field -> true
   const [submitting, setSubmitting] = useState(false);
@@ -548,9 +570,16 @@ function AdminDashboard({ onLogout }) {
         >
           🛠️ GoaNow Admin
         </h1>
-        <button onClick={onLogout} className="neon-btn-ghost" style={{ fontSize: 12, padding: "6px 12px", minHeight: 32 }}>
-          Logout
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {adminUser && (
+            <span style={{ color: "var(--text-muted)", fontSize: 13, textTransform: "capitalize" }}>
+              👤 {adminUser}
+            </span>
+          )}
+          <button onClick={onLogout} className="neon-btn-ghost" style={{ fontSize: 12, padding: "6px 12px", minHeight: 32 }}>
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* TABS */}
