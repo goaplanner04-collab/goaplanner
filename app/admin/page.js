@@ -554,8 +554,12 @@ function AdminDashboard({ onLogout }) {
       </div>
 
       {/* TABS */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        {[{ id: "events", label: "📅 Events" }, { id: "settings", label: "⚙️ Settings & Pricing" }].map((t) => (
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        {[
+          { id: "events", label: "Events" },
+          { id: "users", label: "Users & Emails" },
+          { id: "settings", label: "Settings & Pricing" },
+        ].map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
@@ -731,6 +735,10 @@ CREATE POLICY "Service full access" ON settings FOR ALL
             </>
           )}
         </div>
+      )}
+
+      {activeTab === "users" && (
+        <UsersTab getAuthHeaders={getAuthHeaders} showToast={showToast} />
       )}
 
       {activeTab === "events" && <div
@@ -1158,6 +1166,332 @@ CREATE POLICY "Service full access" ON settings FOR ALL
       `}</style>
     </main>
   );
+}
+
+const USER_PAYMENTS_SQL = `CREATE TABLE IF NOT EXISTS user_payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email TEXT NOT NULL,
+  plan_name TEXT,
+  amount_paise INTEGER DEFAULT 0,
+  currency TEXT DEFAULT 'INR',
+  source TEXT,
+  razorpay_order_id TEXT,
+  razorpay_payment_id TEXT UNIQUE,
+  expires_at TIMESTAMPTZ,
+  raw JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS user_payments_email_idx ON user_payments(email);
+ALTER TABLE user_payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service full access" ON user_payments FOR ALL
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');`;
+
+function UsersTab({ getAuthHeaders, showToast }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        headers: getAuthHeaders(),
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json.success) setData(json);
+      else showToast(json.error || "Could not load users");
+    } catch {
+      showToast("Could not load users");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const sendWelcome = async (email = null) => {
+    const target = email || "all non-unsubscribed users";
+    if (!confirm(`Send welcome email to ${target}?`)) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/users/welcome", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(email ? { email } : {}),
+      });
+      const json = await res.json();
+      if (json.sent !== undefined) {
+        showToast(`Welcome sent ${json.sent}/${json.total}${json.failed ? `, failed ${json.failed}` : ""}`);
+      } else {
+        showToast(json.error || "Welcome email failed");
+      }
+    } catch {
+      showToast("Welcome email failed");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const stats = data?.stats || {};
+  const emailStatus = data?.email_status || {};
+  const missingTables = data?.missing_tables || [];
+  const users = data?.users || [];
+  const featureTotals = data?.feature_totals || [];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div className="glass-card" style={{ padding: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: "0 0 4px", fontSize: 26, color: "#fff" }}>Users & Emails</h2>
+            <p style={{ color: "var(--text-muted)", margin: 0, fontSize: 13 }}>
+              Passes, paid history, repeat purchases, feature usage, and welcome email status.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={loadUsers} disabled={loading} className="neon-btn-ghost" style={{ minHeight: 36 }}>
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+            <button type="button" onClick={() => sendWelcome()} disabled={actionLoading || loading || !users.length} className="neon-btn neon-btn-cyan" style={{ minHeight: 36 }}>
+              {actionLoading ? "Sending..." : "Send Welcome To All"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ color: "var(--text-muted)", padding: 20 }}>Loading users...</div>
+      ) : (
+        <>
+          <div className="admin-stats-grid">
+            <StatCard label="Total users" value={stats.total_users || 0} />
+            <StatCard label="Active passes" value={stats.active_passes || 0} />
+            <StatCard label="Paid users" value={stats.paid_users || 0} />
+            <StatCard label="Repeat payers" value={stats.repeat_payers || 0} />
+            <StatCard label="Payments" value={stats.payment_count || 0} />
+            <StatCard label="Revenue" value={`Rs ${stats.total_revenue_inr || 0}`} />
+            <StatCard label="Trial users" value={stats.trial_users || 0} />
+            <StatCard label="Opted out" value={stats.opted_out || 0} />
+          </div>
+
+          <div className="admin-user-grid">
+            <div className="glass-card" style={{ padding: 18 }}>
+              <h3 style={{ margin: "0 0 12px", color: "#fff", fontSize: 20 }}>Resend Status</h3>
+              <InfoRow label="API key" value={emailStatus.configured ? "Configured" : "Missing"} good={emailStatus.configured} />
+              <InfoRow label="From" value={emailStatus.from || "Not set"} />
+              <InfoRow label="Site URL" value={emailStatus.siteUrl || "Not set"} />
+              {!emailStatus.configured && (
+                <div style={{ marginTop: 12, color: "#fca5a5", fontSize: 13 }}>
+                  Add RESEND_API_KEY on Railway, and make sure RESEND_FROM uses a verified Resend domain.
+                </div>
+              )}
+            </div>
+
+            <div className="glass-card" style={{ padding: 18 }}>
+              <h3 style={{ margin: "0 0 12px", color: "#fff", fontSize: 20 }}>Most Used Features</h3>
+              {featureTotals.length === 0 ? (
+                <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No feature usage recorded yet.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {featureTotals.slice(0, 7).map((item) => (
+                    <div key={item.name} style={{ display: "flex", justifyContent: "space-between", gap: 12, color: "#fff", fontSize: 13 }}>
+                      <span>{item.name}</span>
+                      <strong style={{ color: "var(--neon-cyan)" }}>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {missingTables.length > 0 && (
+            <div className="glass-card" style={{ padding: 18, borderColor: "rgba(251,191,36,0.4)" }}>
+              <h3 style={{ margin: "0 0 8px", color: "#fbbf24", fontSize: 18 }}>Supabase setup needed</h3>
+              <p style={{ color: "var(--text-muted)", margin: "0 0 12px", fontSize: 13 }}>
+                Missing table(s): {missingTables.join(", ")}. Payment history will start tracking after the table exists.
+              </p>
+              {missingTables.includes("user_payments") && (
+                <pre style={{ background: "rgba(0,0,0,0.4)", borderRadius: 8, padding: 12, fontSize: 11, color: "#a3e635", overflowX: "auto", margin: 0 }}>
+                  {USER_PAYMENTS_SQL}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {data?.errors?.length > 0 && (
+            <div className="glass-card" style={{ padding: 14, borderColor: "rgba(239,68,68,0.35)", color: "#fca5a5", fontSize: 13 }}>
+              {data.errors.map((err) => `${err.table}: ${err.message}`).join(" | ")}
+            </div>
+          )}
+
+          <div className="glass-card" style={{ padding: 18, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+              <h3 style={{ margin: 0, color: "#fff", fontSize: 22 }}>User Details</h3>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{users.length} user{users.length === 1 ? "" : "s"}</span>
+            </div>
+
+            {users.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", padding: 20, textAlign: "center" }}>No users found yet.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 980 }}>
+                  <thead>
+                    <tr style={{ color: "var(--text-muted)", textAlign: "left" }}>
+                      <th style={th}>Email</th>
+                      <th style={th}>Plan</th>
+                      <th style={th}>Status</th>
+                      <th style={th}>Payments</th>
+                      <th style={th}>Most used</th>
+                      <th style={th}>Subscriber</th>
+                      <th style={th}>Last seen</th>
+                      <th style={th}>Email</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <tr key={user.email} style={{ borderTop: "1px solid var(--border-glass)" }}>
+                        <td style={td}>
+                          <div style={{ fontWeight: 700 }}>{user.email}</div>
+                          {user.bonus_builds > 0 && (
+                            <div style={{ color: "var(--neon-cyan)", fontSize: 12, marginTop: 3 }}>
+                              {user.bonus_builds} bonus AI builds
+                            </div>
+                          )}
+                        </td>
+                        <td style={td}>
+                          <div>{user.plan_name || "Unknown"}</div>
+                          <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{user.source || "no source"}</div>
+                        </td>
+                        <td style={td}>
+                          <StatusPill active={user.active} />
+                          <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 5 }}>
+                            {user.expires_at ? `Expires ${formatDate(user.expires_at)}` : "No expiry"}
+                          </div>
+                        </td>
+                        <td style={td}>
+                          <div>{user.payment_count} time{user.payment_count === 1 ? "" : "s"}</div>
+                          <div style={{ color: "var(--neon-cyan)", fontSize: 12 }}>Rs {Math.round(user.total_paid_inr || 0)}</div>
+                          {user.last_payment_at && (
+                            <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{formatDate(user.last_payment_at)}</div>
+                          )}
+                        </td>
+                        <td style={td}>
+                          {user.most_used_feature ? (
+                            <>
+                              <div>{user.most_used_feature.name}</div>
+                              <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{user.most_used_feature.count} event{user.most_used_feature.count === 1 ? "" : "s"}</div>
+                            </>
+                          ) : "No usage"}
+                        </td>
+                        <td style={td}>
+                          {user.opted_out ? (
+                            <span style={{ color: "#fca5a5" }}>Opted out</span>
+                          ) : (
+                            <span style={{ color: "var(--neon-cyan)" }}>Subscribed</span>
+                          )}
+                          <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{user.subscriber_source || "-"}</div>
+                        </td>
+                        <td style={td}>{user.last_seen_at ? formatDate(user.last_seen_at) : "-"}</td>
+                        <td style={td}>
+                          <button
+                            type="button"
+                            onClick={() => sendWelcome(user.email)}
+                            disabled={actionLoading}
+                            className="neon-btn-ghost"
+                            style={{ padding: "5px 10px", minHeight: 30, fontSize: 12 }}
+                          >
+                            Welcome
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <style jsx>{`
+        .admin-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .admin-user-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+          gap: 14px;
+        }
+        @media (max-width: 760px) {
+          .admin-stats-grid,
+          .admin-user-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="glass-card" style={{ padding: 14 }}>
+      <div style={{ color: "var(--text-muted)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {label}
+      </div>
+      <div style={{ color: "#fff", fontSize: 28, fontFamily: "'Bebas Neue'", marginTop: 4 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, good }) {
+  const color = good === undefined ? "#fff" : good ? "var(--neon-cyan)" : "#fca5a5";
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-glass)", fontSize: 13 }}>
+      <span style={{ color: "var(--text-muted)" }}>{label}</span>
+      <span style={{ color, textAlign: "right", overflowWrap: "anywhere" }}>{value}</span>
+    </div>
+  );
+}
+
+function StatusPill({ active }) {
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      borderRadius: 999,
+      padding: "3px 8px",
+      fontSize: 11,
+      fontWeight: 700,
+      color: active ? "var(--neon-cyan)" : "#fca5a5",
+      border: `1px solid ${active ? "rgba(51,214,200,0.35)" : "rgba(239,68,68,0.35)"}`,
+      background: active ? "rgba(51,214,200,0.08)" : "rgba(239,68,68,0.08)",
+    }}>
+      {active ? "Active" : "Expired"}
+    </span>
+  );
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  try {
+    return new Date(value).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "-";
+  }
 }
 
 const th = {

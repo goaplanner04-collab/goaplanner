@@ -68,6 +68,15 @@ function getOrCreateSessionId() {
   }
 }
 
+function getStoredEmail() {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem("goanow_email") || "";
+  } catch {
+    return "";
+  }
+}
+
 export default function ItineraryBuilder() {
   const [input, setInput] = useState("");
   const [error, setError] = useState(null);
@@ -115,8 +124,7 @@ export default function ItineraryBuilder() {
     setBudgetTipDismissed(false);
 
     try {
-      let userEmail = "";
-      try { userEmail = localStorage.getItem("goanow_email") || ""; } catch {}
+      const userEmail = getStoredEmail();
 
       const res = await fetch("/api/itinerary", {
         method: "POST",
@@ -177,7 +185,7 @@ export default function ItineraryBuilder() {
           event_type: "itinerary_built",
           area: data.userArea,
           language: data.language,
-          data: { session_id: sessionIdRef.current, data_source: data.dataSource },
+          data: { email: userEmail, session_id: sessionIdRef.current, data_source: data.dataSource },
         }),
       }).catch(() => {});
 
@@ -374,7 +382,7 @@ export default function ItineraryBuilder() {
         fetch("/api/analytics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event_type: "plan_saved", data: { share_id: data.shareId } }),
+          body: JSON.stringify({ event_type: "plan_saved", data: { email: getStoredEmail(), share_id: data.shareId } }),
         }).catch(() => {});
       } else {
         showToast(data.error || "Save failed");
@@ -391,7 +399,7 @@ export default function ItineraryBuilder() {
     fetch("/api/analytics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_type: "plan_shared", data: { share_id: shareId } }),
+      body: JSON.stringify({ event_type: "plan_shared", data: { email: getStoredEmail(), share_id: shareId } }),
     }).catch(() => {});
 
     if (navigator.share) {
@@ -421,7 +429,7 @@ export default function ItineraryBuilder() {
     fetch("/api/analytics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_type: rating === "up" ? "thumbs_up" : "thumbs_down", data: { share_id: shareId } }),
+      body: JSON.stringify({ event_type: rating === "up" ? "thumbs_up" : "thumbs_down", data: { email: getStoredEmail(), share_id: shareId } }),
     }).catch(() => {});
   };
 

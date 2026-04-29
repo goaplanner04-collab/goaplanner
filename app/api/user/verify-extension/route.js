@@ -1,12 +1,13 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { addBonusBuilds } from "@/lib/userPass";
+import { addBonusBuilds, recordAnalyticsEvent, recordUserPayment } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const EXTENSION_BUILDS = 5;
+const EXTENSION_PRICE_INR = 10;
 
 export async function POST(req) {
   try {
@@ -41,6 +42,27 @@ export async function POST(req) {
     }
 
     const result = await addBonusBuilds(supabase, { email, count: EXTENSION_BUILDS });
+    await recordUserPayment(supabase, {
+      email,
+      planName: "AI Build Extension",
+      amountPaise: EXTENSION_PRICE_INR * 100,
+      source: "extension",
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      raw: { added_builds: EXTENSION_BUILDS },
+    });
+    await recordAnalyticsEvent(supabase, {
+      eventType: "payment_success",
+      email,
+      data: {
+        source: "extension",
+        plan_name: "AI Build Extension",
+        builds: EXTENSION_BUILDS,
+        amount_paise: EXTENSION_PRICE_INR * 100,
+        razorpay_order_id,
+        razorpay_payment_id,
+      },
+    });
     return NextResponse.json({
       success: true,
       bonusBuilds: result?.bonusBuilds || 0,

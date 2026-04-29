@@ -80,6 +80,17 @@ export default function DashboardPage() {
     }
   }, [tab]);
 
+  useEffect(() => {
+    if (!authChecked || typeof window === "undefined") return;
+    let email = "";
+    try { email = localStorage.getItem("goanow_email") || ""; } catch {}
+    fetch("/api/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: "tab_viewed", data: { email, tab } }),
+    }).catch(() => {});
+  }, [authChecked, tab]);
+
   if (!authChecked) {
     return (
       <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>

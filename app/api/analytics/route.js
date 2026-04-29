@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { normalizeEmail } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,12 +30,15 @@ export async function POST(req) {
       return NextResponse.json({ success: true, recorded: false });
     }
 
+    const data = body.data && typeof body.data === "object" ? { ...body.data } : null;
+    if (data?.email) data.email = normalizeEmail(data.email);
+
     await supabase.from("analytics").insert({
       event_type: eventType,
       area: body.area ? String(body.area).slice(0, 80) : null,
       language: body.language ? String(body.language).slice(0, 8) : null,
       plan: Number.isFinite(Number(body.plan)) ? Number(body.plan) : null,
-      data: body.data && typeof body.data === "object" ? body.data : null,
+      data,
     });
 
     return NextResponse.json({ success: true, recorded: true });

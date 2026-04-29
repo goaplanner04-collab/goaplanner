@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isEmailValid, sendWelcomeEmail } from "@/lib/resend";
-import { grantPass } from "@/lib/userPass";
+import { grantPass, recordAnalyticsEvent } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +73,16 @@ export async function POST(req) {
           },
           { onConflict: "email" }
         ).then(() => {}).catch(() => {});
+
+        recordAnalyticsEvent(supabaseForEmail, {
+          eventType: "payment_success",
+          email: customerEmail,
+          data: {
+            source: "trial",
+            plan_name: planName,
+            amount_paise: 0,
+          },
+        }).catch(() => {});
       }
       sendWelcomeEmail({
         to: customerEmail,

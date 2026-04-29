@@ -200,6 +200,7 @@ export default function PaywallModal({ open, onClose, initialPlan = "week", pref
                 planName: plan.name,
                 expiryAt,
                 durationMs: plan.duration_ms,
+                amountPaise: plan.paise,
               }),
             });
             const verifyData = await verifyRes.json();

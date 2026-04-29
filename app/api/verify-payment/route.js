@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isEmailValid, sendWelcomeEmail } from "@/lib/resend";
-import { grantPass } from "@/lib/userPass";
+import { grantPass, recordAnalyticsEvent, recordUserPayment } from "@/lib/userPass";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,7 @@ export async function POST(req) {
     const planName = body.planName ? String(body.planName).slice(0, 80) : null;
     const expiryAt = body.expiryAt ? new Date(body.expiryAt).toISOString() : null;
     const durationMs = Number(body.durationMs) || 0;
+    const amountPaise = Math.max(0, parseInt(body.amountPaise, 10) || 0);
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return NextResponse.json({ success: false, error: "Missing fields" }, { status: 400 });
@@ -63,13 +64,38 @@ export async function POST(req) {
         } catch {
           // ignore — table may not exist
         }
+        await recordUserPayment(supabase, {
+          email: customerEmail,
+          planName,
+          amountPaise,
+          source: "paid",
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          expiresAt: serverExpiryAt,
+          raw: {
+            order_id: razorpay_order_id,
+            payment_id: razorpay_payment_id,
+            plan_name: planName,
+          },
+        });
+        await recordAnalyticsEvent(supabase, {
+          eventType: "payment_success",
+          email: customerEmail,
+          data: {
+            source: "paid",
+            plan_name: planName,
+            amount_paise: amountPaise,
+            razorpay_order_id,
+            razorpay_payment_id,
+          },
+        });
       }
       sendWelcomeEmail({
         to: customerEmail,
         planName,
         expiryAt: serverExpiryAt,
         source: "paid",
-      }).catch(() => {});
+      }).catch((err) => console.error("welcome email failed", err));
     }
 
     return NextResponse.json({ success: true, expiresAt: serverExpiryAt });
