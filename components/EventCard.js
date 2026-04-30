@@ -17,6 +17,20 @@ const VIBE_EMOJI = {
   "World Music": "🥁",
 };
 
+const VIBE_FALLBACK_IMG = {
+  "Psy Trance":           "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=900&q=80",
+  "Techno":               "https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=900&q=80",
+  "EDM":                  "https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=900&q=80",
+  "Commercial/Bollywood": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=900&q=80",
+  "Live Band":            "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=900&q=80",
+  "Live Music":           "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=900&q=80",
+  "Sunset Session":       "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=900&q=80",
+  "Silent Disco":         "https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=900&q=80",
+  "Indie/Folk":           "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=900&q=80",
+  "World Music":          "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=900&q=80",
+  _default:               "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=900&q=80",
+};
+
 function vibeEmoji(vibe) {
   if (!vibe) return "🎉";
   const key = String(vibe).trim();
@@ -119,7 +133,8 @@ export default function EventCard({ event, distanceKm }) {
         `${event.venue}, ${event.area}, Goa`
       )}`;
 
-  const hasImage = typeof event.image_url === "string" && event.image_url.trim().length > 0 && !imgFailed;
+  const hasFlyer = typeof event.image_url === "string" && event.image_url.trim().length > 0 && !imgFailed;
+  const fallbackImg = VIBE_FALLBACK_IMG[event.vibe] || VIBE_FALLBACK_IMG._default;
 
   return (
     <div className="glass-card event-card">
@@ -134,54 +149,39 @@ export default function EventCard({ event, distanceKm }) {
         borderTopLeftRadius: 14,
         borderTopRightRadius: 14,
         overflow: "hidden",
-        background: hasImage ? "transparent" : "linear-gradient(135deg, rgba(20,22,32,0.95), rgba(11,13,20,0.95))",
-        display: hasImage ? "block" : "flex",
-        alignItems: "center",
-        justifyContent: "center",
       }}>
-        {hasImage ? (
-          <>
-            <img
-              src={event.image_url}
-              alt={event.name}
-              loading="lazy"
-              onError={() => setImgFailed(true)}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-            <div style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 80,
-              background: "linear-gradient(180deg, transparent, rgba(0,0,0,0.8))",
-              pointerEvents: "none",
-            }} />
-            {event.image_source === "instagram" && (
-              <span style={{
-                position: "absolute",
-                top: 8,
-                right: 8,
-                background: "rgba(0,0,0,0.6)",
-                color: "#fff",
-                borderRadius: 20,
-                padding: "2px 8px",
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: 0.2,
-              }}>
-                via Instagram
-              </span>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: 48, color: "var(--neon-pink)" }}>
+        <img
+          src={hasFlyer ? event.image_url : fallbackImg}
+          alt={event.name}
+          loading="lazy"
+          onError={() => setImgFailed(true)}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+        {/* gradient overlay so text beneath is readable */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: hasFlyer
+            ? "linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.85) 100%)"
+            : "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.7) 100%)",
+          pointerEvents: "none",
+        }} />
+        {/* vibe emoji badge when using fallback */}
+        {!hasFlyer && (
+          <span style={{
+            position: "absolute", top: 12, left: 12,
+            fontSize: 28, lineHeight: 1,
+            background: "rgba(0,0,0,0.5)", borderRadius: 10, padding: "4px 8px",
+          }}>
             {vibeEmoji(event.vibe)}
+          </span>
+        )}
+        {event.image_source === "instagram" && (
+          <span style={{
+            position: "absolute", top: 8, right: 8,
+            background: "rgba(0,0,0,0.6)", color: "#fff",
+            borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 500,
+          }}>
+            via Instagram
           </span>
         )}
       </div>

@@ -395,7 +395,15 @@ function AdminDashboard({ onLogout, adminUser }) {
           body: JSON.stringify({ image: base64, mediaType: draft.file.type }),
         });
         const upData = await upRes.json();
-        if (upData.url) image_url = upData.url;
+        if (upData.url) {
+          image_url = upData.url;
+        } else {
+          // Storage bucket not set up — save event without image, warn clearly
+          const storageErr = upData.error || "Storage upload failed";
+          setDrafts((prev) => prev.map((d) => d.id === draftId
+            ? { ...d, errorMsg: `⚠️ Flyer not saved: ${storageErr}. Create the "event-flyers" bucket in Supabase Storage (Public ON), then re-save.` }
+            : d));
+        }
       }
       const payload = { ...draft.fields };
       if (payload.lat === "") payload.lat = null;
