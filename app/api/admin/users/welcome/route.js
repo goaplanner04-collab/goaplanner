@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkAdminAuth } from "@/lib/adminAuth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getResendStatus, isEmailValid, sendWelcomeEmail } from "@/lib/resend";
 import { normalizeEmail } from "@/lib/userPass";
@@ -7,11 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function checkAuth(req) {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  return req.headers.get("x-admin-auth") === expected;
-}
 
 function safeDate(value) {
   if (!value) return null;
@@ -30,7 +26,7 @@ async function readTable(supabase, table) {
 }
 
 export async function POST(req) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

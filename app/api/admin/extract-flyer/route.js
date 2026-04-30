@@ -1,16 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { checkAdminAuth } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function checkAuth(req) {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  const header = req.headers.get("x-admin-auth");
-  return header && header === expected;
-}
 
 const SYSTEM = `Extract event details from this party flyer image.
 Return ONLY a valid JSON object with these exact fields:
@@ -41,7 +36,7 @@ function tryParseJson(raw) {
 }
 
 export async function POST(req) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 

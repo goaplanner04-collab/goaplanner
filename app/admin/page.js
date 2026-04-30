@@ -68,6 +68,7 @@ export default function AdminPage() {
       if (data.success) {
         sessionStorage.setItem("admin_auth", "true");
         sessionStorage.setItem("admin_user", data.user);
+        sessionStorage.setItem("admin_pwd", pwd);
         setAdminUser(data.user);
         setAuthed(true);
       } else {
@@ -145,6 +146,7 @@ export default function AdminPage() {
   return <AdminDashboard adminUser={adminUser} onLogout={() => {
     sessionStorage.removeItem("admin_auth");
     sessionStorage.removeItem("admin_user");
+    sessionStorage.removeItem("admin_pwd");
     setAdminUser("");
     setAuthed(false);
   }} />;
@@ -158,10 +160,8 @@ function AdminDashboard({ onLogout, adminUser }) {
   const [showWeek, setShowWeek] = useState(false);
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
-  const [flyer, setFlyer] = useState(null);
-  const [flyerPreview, setFlyerPreview] = useState(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState(null);
+  const [drafts, setDrafts] = useState([]);
+  const [batchExtracting, setBatchExtracting] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState(null);
   const [scrapedEvents, setScrapedEvents] = useState([]);
@@ -228,9 +228,6 @@ function AdminDashboard({ onLogout, adminUser }) {
   const resetForm = () => {
     setEvent(EMPTY_EVENT);
     setAiFilled({});
-    setFlyer(null);
-    setFlyerPreview(null);
-    setExtractError(null);
   };
 
   const submit = async (e) => {
@@ -313,67 +310,122 @@ function AdminDashboard({ onLogout, adminUser }) {
     }
   };
 
-  const handleFlyerChange = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (!/image\/(jpeg|png|webp)/.test(f.type)) {
-      setExtractError("Use JPG, PNG or WEBP");
-      return;
-    }
-    setFlyer(f);
-    setExtractError(null);
-    const reader = new FileReader();
-    reader.onload = () => setFlyerPreview(reader.result);
-    reader.readAsDataURL(f);
-  };
+  const fileToBase64 = (file) => new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(",")[1]);
+    r.readAsDataURL(file);
+  });
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    handleFlyerChange({ target: { files: [f] } });
-  };
-
-  const extractFlyer = async () => {
-    if (!flyer) return;
-    setExtracting(true);
-    setExtractError(null);
-    try {
+  const handleMultiFlyers = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const newDrafts = files.map((f) => ({
+      id: Math.random().toString(36).slice(2),
+      file: f,
+      preview: null,
+      fields: { ...EMPTY_EVENT, date: today, publish_on: today },
+      status: "pending",
+      errorMsg: null,
+    }));
+    newDrafts.forEach((draft, i) => {
       const reader = new FileReader();
-      const base64 = await new Promise((resolve) => {
-        reader.onload = () => {
-          const result = reader.result;
-          resolve(result.split(",")[1]);
-        };
-        reader.readAsDataURL(flyer);
-      });
+      reader.onload = (ev) =>
+        setDrafts((prev) => prev.map((d) => d.id === draft.id ? { ...d, preview: ev.target.result } : d));
+      reader.readAsDataURL(files[i]);
+    });
+    setDrafts((prev) => [...prev, ...newDrafts]);
+    e.target.value = "";
+  };
 
-      const res = await fetch("/api/admin/extract-flyer", {
+  const handleFlyerDrop = (e) => {
+    e.preventDefault();
+    handleMultiFlyers({ target: { files: e.dataTransfer.files }, });
+  };
+
+  const updateDraftField = (draftId, key, value) => {
+    setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, fields: { ...d.fields, [key]: value } } : d));
+  };
+
+  const removeDraft = (draftId) => {
+    setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+  };
+
+  const extractAllDrafts = async () => {
+    setBatchExtracting(true);
+    const pending = drafts.filter((d) => d.status === "pending");
+    await Promise.all(pending.map(async (draft) => {
+      setDrafts((prev) => prev.map((d) => d.id === draft.id ? { ...d, status: "extracting" } : d));
+      try {
+        const base64 = await fileToBase64(draft.file);
+        const res = await fetch("/api/admin/extract-flyer", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ image: base64, mediaType: draft.file.type }),
+        });
+        const data = await res.json();
+        const today = new Date().toISOString().slice(0, 10);
+        const fields = data.success
+          ? { ...EMPTY_EVENT, date: today, publish_on: today, ...data.fields }
+          : { ...EMPTY_EVENT, date: today, publish_on: today };
+        setDrafts((prev) => prev.map((d) => d.id === draft.id
+          ? { ...d, status: "ready", fields, errorMsg: data.success ? null : (data.error || "AI read failed — fill manually") }
+          : d));
+      } catch {
+        setDrafts((prev) => prev.map((d) => d.id === draft.id
+          ? { ...d, status: "ready", errorMsg: "Extraction failed — fill manually" }
+          : d));
+      }
+    }));
+    setBatchExtracting(false);
+  };
+
+  const saveDraft = async (draftId) => {
+    const draft = drafts.find((d) => d.id === draftId);
+    if (!draft) return;
+    setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, status: "saving" } : d));
+    try {
+      let image_url = null;
+      if (draft.file) {
+        const base64 = await fileToBase64(draft.file);
+        const upRes = await fetch("/api/admin/upload-flyer-image", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ image: base64, mediaType: draft.file.type }),
+        });
+        const upData = await upRes.json();
+        if (upData.url) image_url = upData.url;
+      }
+      const payload = { ...draft.fields };
+      if (payload.lat === "") payload.lat = null;
+      else if (payload.lat) payload.lat = parseFloat(payload.lat);
+      if (payload.lng === "") payload.lng = null;
+      else if (payload.lng) payload.lng = parseFloat(payload.lng);
+      if (!payload.entry_fee) payload.entry_fee = "Check at venue";
+      if (image_url) payload.image_url = image_url;
+
+      const res = await fetch("/api/admin/events", {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ image: base64, mediaType: flyer.type })
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!data.success) {
-        setExtractError(data.error || "Couldn't read flyer clearly. Please fill in manually.");
-        return;
+      if (data.success) {
+        setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, status: "saved" } : d));
+        showToast("Event saved! 🎉");
+        fetchEvents();
+      } else {
+        setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, status: "ready", errorMsg: data.error || "Save failed" } : d));
       }
-      const fields = data.fields || {};
-      const filled = {};
-      const next = { ...event };
-      ["name", "venue", "area", "date", "start_time", "entry_fee", "vibe", "source"].forEach((k) => {
-        if (fields[k] && String(fields[k]).trim()) {
-          next[k] = fields[k];
-          filled[k] = true;
-        }
-      });
-      setEvent(next);
-      setAiFilled(filled);
-      showToast("AI filled the form ✨");
-    } catch (e) {
-      setExtractError("Couldn't read flyer clearly. Please fill in manually.");
-    } finally {
-      setExtracting(false);
+    } catch {
+      setDrafts((prev) => prev.map((d) => d.id === draftId ? { ...d, status: "ready", errorMsg: "Save failed" } : d));
+    }
+  };
+
+  const saveAllDrafts = async () => {
+    const ready = drafts.filter((d) => d.status === "ready");
+    for (const draft of ready) {
+      await saveDraft(draft.id);
     }
   };
 
@@ -899,73 +951,164 @@ CREATE POLICY "Service full access" ON settings FOR ALL
             </div>
           </form>
 
-          {/* FLYER UPLOAD */}
+          {/* MULTI FLYER UPLOAD */}
           <div className="glass-card" style={{ padding: 18 }}>
-            <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#fff" }}>
-              📸 Got a flyer? AI will fill the form
-            </h2>
+            <h2 style={{ margin: "0 0 4px", fontSize: 22, color: "#fff" }}>📸 Upload Party Flyers</h2>
             <p style={{ color: "var(--text-muted)", margin: "0 0 14px", fontSize: 13 }}>
-              Screenshot the Instagram story and upload it
+              Select multiple screenshots — AI fills the details for each, then save them all at once.
             </p>
 
             <div
               onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              style={{
-                border: "2px dashed var(--border-glass)",
-                borderRadius: 14,
-                padding: 20,
-                textAlign: "center",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                background: "rgba(255,255,255,0.02)"
-              }}
-              onClick={() => document.getElementById("flyer-input").click()}
+              onDrop={handleFlyerDrop}
+              onClick={() => document.getElementById("multi-flyer-input").click()}
+              style={{ border: "2px dashed var(--border-glass)", borderRadius: 14, padding: 20, textAlign: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", marginBottom: 12 }}
             >
               <input
-                id="flyer-input"
+                id="multi-flyer-input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={handleFlyerChange}
+                multiple
+                onChange={handleMultiFlyers}
                 style={{ display: "none" }}
               />
-              {flyerPreview ? (
-                <img src={flyerPreview} alt="Flyer" style={{ maxHeight: 280, maxWidth: "100%", borderRadius: 10 }} />
-              ) : (
-                <div style={{ color: "var(--text-muted)" }}>
-                  <div style={{ fontSize: 36 }}>📤</div>
-                  <div>Drop a flyer image, or click to upload</div>
-                  <div style={{ fontSize: 12, marginTop: 6 }}>JPG, PNG, WEBP</div>
-                </div>
-              )}
+              <div style={{ color: "var(--text-muted)" }}>
+                <div style={{ fontSize: 32 }}>📤</div>
+                <div style={{ fontSize: 14, marginTop: 4 }}>Drop flyers here or click to select</div>
+                <div style={{ fontSize: 11, marginTop: 4 }}>You can select multiple images at once</div>
+              </div>
             </div>
 
-            {flyer && (
-              <button
-                type="button"
-                onClick={extractFlyer}
-                disabled={extracting}
-                className="neon-btn neon-btn-cyan"
-                style={{ width: "100%", marginTop: 12 }}
-              >
-                {extracting ? "🤖 Reading your flyer..." : "🔍 Extract with AI"}
-              </button>
-            )}
+            {drafts.length > 0 && (
+              <>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                  {drafts.some((d) => d.status === "pending") && (
+                    <button
+                      type="button"
+                      onClick={extractAllDrafts}
+                      disabled={batchExtracting}
+                      className="neon-btn neon-btn-cyan"
+                      style={{ flex: 1, minWidth: 160 }}
+                    >
+                      {batchExtracting ? "🤖 Reading flyers..." : `🔍 Extract All with AI (${drafts.filter(d => d.status === "pending").length})`}
+                    </button>
+                  )}
+                  {drafts.some((d) => d.status === "ready") && (
+                    <button
+                      type="button"
+                      onClick={saveAllDrafts}
+                      className="neon-btn"
+                      style={{ flex: 1, minWidth: 160 }}
+                    >
+                      💾 Save All ({drafts.filter(d => d.status === "ready").length})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDrafts([])}
+                    className="neon-btn-ghost"
+                    style={{ padding: "0 14px" }}
+                  >
+                    Clear All
+                  </button>
+                </div>
 
-            {extractError && (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 10,
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  color: "#fca5a5",
-                  borderRadius: 8,
-                  fontSize: 13
-                }}
-              >
-                {extractError}
-              </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {drafts.map((draft) => (
+                    <div key={draft.id} style={{ border: "1px solid var(--border-glass)", borderRadius: 12, overflow: "hidden", background: draft.status === "saved" ? "rgba(0,200,140,0.05)" : "rgba(255,255,255,0.02)" }}>
+                      <div style={{ display: "flex", gap: 0 }}>
+                        {/* Flyer thumbnail */}
+                        {draft.preview && (
+                          <div style={{ width: 100, minWidth: 100, height: 130, overflow: "hidden", flexShrink: 0 }}>
+                            <img src={draft.preview} alt="flyer" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          </div>
+                        )}
+                        <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                          {/* Status row */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, color: draft.status === "saved" ? "var(--neon-cyan)" : draft.status === "extracting" || draft.status === "saving" ? "var(--neon-gold)" : "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                              {draft.status === "pending" ? "⏳ Pending" : draft.status === "extracting" ? "🤖 Reading..." : draft.status === "ready" ? "✏️ Ready" : draft.status === "saving" ? "💾 Saving..." : "✅ Saved"}
+                            </span>
+                            {draft.status !== "saved" && (
+                              <button type="button" onClick={() => removeDraft(draft.id)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>✕</button>
+                            )}
+                          </div>
+
+                          {draft.errorMsg && (
+                            <div style={{ fontSize: 11, color: "#fca5a5" }}>{draft.errorMsg}</div>
+                          )}
+
+                          {(draft.status === "ready" || draft.status === "saving") && (
+                            <>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                                <input
+                                  className="input-field"
+                                  placeholder="Event name *"
+                                  value={draft.fields.name}
+                                  onChange={(e) => updateDraftField(draft.id, "name", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                                <input
+                                  className="input-field"
+                                  placeholder="Venue *"
+                                  value={draft.fields.venue}
+                                  onChange={(e) => updateDraftField(draft.id, "venue", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                                <input
+                                  className="input-field"
+                                  placeholder="Area *"
+                                  value={draft.fields.area}
+                                  onChange={(e) => updateDraftField(draft.id, "area", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                                <input
+                                  className="input-field"
+                                  placeholder="Start time *"
+                                  value={draft.fields.start_time}
+                                  onChange={(e) => updateDraftField(draft.id, "start_time", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                                <input
+                                  type="date"
+                                  className="input-field"
+                                  value={draft.fields.date}
+                                  onChange={(e) => updateDraftField(draft.id, "date", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                                <input
+                                  className="input-field"
+                                  placeholder="Entry fee"
+                                  value={draft.fields.entry_fee}
+                                  onChange={(e) => updateDraftField(draft.id, "entry_fee", e.target.value)}
+                                  style={{ fontSize: 12, padding: "6px 10px" }}
+                                />
+                              </div>
+                              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => saveDraft(draft.id)}
+                                  disabled={draft.status === "saving" || !draft.fields.name || !draft.fields.venue || !draft.fields.area || !draft.fields.start_time}
+                                  className="neon-btn"
+                                  style={{ flex: 1, fontSize: 12, padding: "7px 0" }}
+                                >
+                                  {draft.status === "saving" ? "Saving..." : "💾 Save Event"}
+                                </button>
+                              </div>
+                            </>
+                          )}
+
+                          {draft.status === "saved" && (
+                            <div style={{ fontSize: 13, color: "var(--neon-cyan)" }}>
+                              {draft.fields.name} — {draft.fields.venue}, {draft.fields.area}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 

@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { checkAdminAuth } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function checkAuth(req) {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  const header = req.headers.get("x-admin-auth");
-  return header && header === expected;
-}
 
 function sanitize(body) {
   const allowed = [
     "name", "venue", "area", "lat", "lng", "date", "start_time",
     "entry_fee", "vibe", "status", "source", "description",
-    "insider_tip", "publish_on"
+    "insider_tip", "publish_on", "image_url"
   ];
   const out = {};
   for (const k of allowed) {
@@ -32,7 +26,7 @@ function sanitize(body) {
 }
 
 export async function POST(req) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

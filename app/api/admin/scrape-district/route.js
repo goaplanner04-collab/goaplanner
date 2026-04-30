@@ -1,15 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { checkAdminAuth } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function checkAuth(req) {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  return req.headers.get("x-admin-auth") === expected;
-}
 
 const SYSTEM = `You are an event data extractor. You receive raw HTML or text from district.in which lists Goa events.
 
@@ -110,7 +106,7 @@ async function fetchDistrictContent() {
 }
 
 export async function POST(req) {
-  if (!checkAuth(req)) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 

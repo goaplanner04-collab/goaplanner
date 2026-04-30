@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkAdminAuth } from "@/lib/adminAuth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_PRICING } from "@/app/api/settings/route";
 
@@ -7,11 +8,6 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_TRIAL_HOURS = 168;
 
-function checkAuth(req) {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  return req.headers.get("x-admin-auth") === expected;
-}
 
 function normalizeTrialCode(value) {
   return String(value || "").trim().toUpperCase().slice(0, 30);
@@ -62,7 +58,7 @@ function getEnvTrialKeys() {
 }
 
 export async function GET(req) {
-  if (!checkAuth(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!checkAdminAuth(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const envKeys = getEnvTrialKeys();
   const supabase = getSupabaseAdmin();
@@ -110,7 +106,7 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
-  if (!checkAuth(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!checkAdminAuth(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ error: "Supabase not configured — set env vars on Railway" }, { status: 500 });
