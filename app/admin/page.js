@@ -190,7 +190,8 @@ function AdminDashboard({ onLogout, adminUser }) {
   const fetchEvents = async () => {
     setLoadingEvents(true);
     try {
-      const url = showWeek ? "/api/events?range=week" : "/api/events?range=today&admin=1";
+      const localDate = new Date().toLocaleDateString("en-CA");
+      const url = showWeek ? "/api/events?range=week" : `/api/events?range=today&admin=1&date=${localDate}`;
       const res = await fetch(url, {
         headers: getAuthHeaders(),
         cache: "no-store"

@@ -499,7 +499,8 @@ function EventsTab() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/events", { cache: "no-store" });
+      const localDate = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local timezone
+      const res = await fetch(`/api/events?date=${localDate}`, { cache: "no-store" });
       const data = await res.json();
       setEvents(data.events || []);
       setUpdatedAt(new Date());

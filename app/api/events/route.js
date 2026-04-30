@@ -61,7 +61,12 @@ export async function GET(req) {
     const range = url.searchParams.get("range") || "today";
     const isAdmin = url.searchParams.get("admin") === "1";
 
-    const today = new Date().toISOString().slice(0, 10);
+    // Prefer the client-supplied date (correct local timezone) over server UTC.
+    const clientDate = url.searchParams.get("date") || "";
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(clientDate)
+      ? clientDate
+      : new Date().toISOString().slice(0, 10);
+
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
