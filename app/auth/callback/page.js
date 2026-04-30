@@ -9,51 +9,33 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const sb = getBrowserSupabase();
     if (!sb) {
-      setStatus("Auth not configured. Redirecting…");
       window.location.replace("/");
       return;
     }
 
-    const handle = async () => {
+    // With implicit flow, Supabase detects the #access_token fragment
+    // automatically via detectSessionInUrl. We just poll until the session
+    // is ready, then redirect home.
+    let attempts = 0;
+    const poll = async () => {
       try {
-        // PKCE flow: ?code=...
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-
-        if (code) {
-          const { error } = await sb.auth.exchangeCodeForSession(window.location.href);
-          if (error) {
-            setStatus("Sign-in failed: " + error.message);
-            setTimeout(() => window.location.replace("/"), 2200);
-            return;
-          }
+        const { data } = await sb.auth.getSession();
+        if (data?.session?.user) {
+          try { localStorage.setItem("goanow_email", data.session.user.email || ""); } catch {}
+          window.location.replace("/");
+          return;
         }
+      } catch {}
 
-        // Implicit flow falls through getSession (handled by detectSessionInUrl)
-        let attempts = 0;
-        const waitForSession = async () => {
-          const { data } = await sb.auth.getSession();
-          if (data?.session?.user) {
-            // Mirror email into localStorage for forms (PaywallModal etc.)
-            try { localStorage.setItem("goanow_email", data.session.user.email || ""); } catch {}
-            window.location.replace("/");
-            return;
-          }
-          if (attempts++ < 20) {
-            setTimeout(waitForSession, 150);
-          } else {
-            setStatus("Could not establish session. Redirecting…");
-            setTimeout(() => window.location.replace("/"), 1500);
-          }
-        };
-        waitForSession();
-      } catch (err) {
-        setStatus("Error: " + (err?.message || "unknown"));
-        setTimeout(() => window.location.replace("/"), 2000);
+      if (attempts++ < 30) {
+        setTimeout(poll, 200);
+      } else {
+        setStatus("Sign-in timed out. Redirecting…");
+        setTimeout(() => window.location.replace("/"), 1500);
       }
     };
 
-    handle();
+    poll();
   }, []);
 
   return (
