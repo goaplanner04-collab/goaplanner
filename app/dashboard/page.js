@@ -484,6 +484,7 @@ function EventsTab() {
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [coords, setCoords] = useState(null);
+  const [activeFilter, setActiveFilter] = useState("all");
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -499,7 +500,7 @@ function EventsTab() {
     setLoading(true);
     setError(null);
     try {
-      const localDate = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local timezone
+      const localDate = new Date().toLocaleDateString("en-CA");
       const res = await fetch(`/api/events?date=${localDate}`, { cache: "no-store" });
       const data = await res.json();
       setEvents(data.events || []);
@@ -511,28 +512,88 @@ function EventsTab() {
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  useEffect(() => { fetchEvents(); }, []);
+
+  // Build dynamic filter pills from loaded events
+  const filterPills = useMemo(() => {
+    if (!events || events.length === 0) return [];
+    const pills = [{ key: "all", label: "🎉 All" }];
+
+    if (events.some((e) => e.status === "happening_now"))
+      pills.push({ key: "status:happening_now", label: "🔴 Now" });
+    if (events.some((e) => e.status === "starting_soon"))
+      pills.push({ key: "status:starting_soon", label: "🟡 Soon" });
+    if (events.some((e) => String(e.entry_fee || "").toLowerCase() === "free"))
+      pills.push({ key: "free", label: "✅ Free Entry" });
+
+    // Unique areas
+    const areas = [...new Set(events.map((e) => e.area).filter(Boolean))];
+    areas.forEach((area) => pills.push({ key: `area:${area}`, label: `📍 ${area}` }));
+
+    // Unique vibes
+    const vibes = [...new Set(events.map((e) => e.vibe).filter(Boolean))];
+    vibes.forEach((vibe) => pills.push({ key: `vibe:${vibe}`, label: vibe }));
+
+    return pills;
+  }, [events]);
+
+  const filtered = useMemo(() => {
+    if (!events) return [];
+    if (activeFilter === "all") return events;
+    if (activeFilter === "free")
+      return events.filter((e) => String(e.entry_fee || "").toLowerCase() === "free");
+    if (activeFilter.startsWith("status:"))
+      return events.filter((e) => e.status === activeFilter.slice(7));
+    if (activeFilter.startsWith("area:"))
+      return events.filter((e) => e.area === activeFilter.slice(5));
+    if (activeFilter.startsWith("vibe:"))
+      return events.filter((e) => e.vibe === activeFilter.slice(5));
+    return events;
+  }, [events, activeFilter]);
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
         <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
           {updatedAt
-            ? `Last updated ${updatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
+            ? `Updated ${updatedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
             : "Loading..."}
         </div>
-        <button
-          onClick={fetchEvents}
-          className="category-pill"
-          style={{ borderColor: "var(--neon-pink)", color: "var(--neon-pink)" }}
-          disabled={loading}
-        >
-          <Icon name="refresh" size={15} />
-          Refresh
+        <button onClick={fetchEvents} className="category-pill" style={{ borderColor: "var(--neon-pink)", color: "var(--neon-pink)" }} disabled={loading}>
+          <Icon name="refresh" size={15} /> Refresh
         </button>
       </div>
+
+      {/* Filter pills */}
+      {!loading && filterPills.length > 1 && (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14, scrollbarWidth: "none" }}>
+          {filterPills.map((pill) => {
+            const active = activeFilter === pill.key;
+            return (
+              <button
+                key={pill.key}
+                onClick={() => setActiveFilter(pill.key)}
+                style={{
+                  flexShrink: 0,
+                  padding: "7px 14px",
+                  borderRadius: 999,
+                  border: active ? "1.5px solid var(--neon-pink)" : "1px solid var(--border-glass)",
+                  background: active ? "rgba(255,61,129,0.15)" : "rgba(255,255,255,0.04)",
+                  color: active ? "#fff" : "var(--text-muted)",
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 400,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s",
+                }}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && <LoadingSkeleton count={4} height={210} />}
 
@@ -544,25 +605,29 @@ function EventsTab() {
 
       {!loading && events && events.length === 0 && (
         <div className="glass-card" style={{ padding: 36, textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
-          <span className="icon-tile">
-            <Icon name="music" size={24} />
-          </span>
+          <span className="icon-tile"><Icon name="music" size={24} /></span>
           <h3 style={{ margin: 0, fontSize: 24, color: "#fff" }}>No parties listed yet</h3>
-          <div style={{ color: "var(--text-muted)", fontSize: 14 }}>
-            Check back after 6 PM. We update the feed daily.
-          </div>
+          <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Check back after 6 PM. We update the feed daily.</div>
           <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 6 }}>
-            In the meantime, check Instagram:{" "}
+            Check Instagram:{" "}
             <a href="https://instagram.com/goavibes" target="_blank" rel="noopener noreferrer" style={{ color: "var(--neon-pink)" }}>@goavibes</a>{" "}
-            <a href="https://instagram.com/goanightlife" target="_blank" rel="noopener noreferrer" style={{ color: "var(--neon-pink)" }}>@goanightlife</a>{" "}
-            <a href="https://instagram.com/sinqpark" target="_blank" rel="noopener noreferrer" style={{ color: "var(--neon-pink)" }}>@sinqpark</a>
+            <a href="https://instagram.com/goanightlife" target="_blank" rel="noopener noreferrer" style={{ color: "var(--neon-pink)" }}>@goanightlife</a>
           </div>
         </div>
       )}
 
-      {!loading && events && events.length > 0 && (
+      {!loading && filtered && filtered.length === 0 && events && events.length > 0 && (
+        <div style={{ textAlign: "center", padding: 32, color: "var(--text-muted)", fontSize: 14 }}>
+          No events match this filter.
+          <button onClick={() => setActiveFilter("all")} style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", color: "var(--neon-pink)", cursor: "pointer", fontSize: 13 }}>
+            Show all
+          </button>
+        </div>
+      )}
+
+      {!loading && filtered && filtered.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {events.map((event) => {
+          {filtered.map((event) => {
             const dist = coords && event.lat && event.lng
               ? getDistanceKm(coords.lat, coords.lng, event.lat, event.lng)
               : null;
