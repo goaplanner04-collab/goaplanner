@@ -1536,16 +1536,41 @@ function UsersTab({ getAuthHeaders, showToast }) {
                     {users.map((user) => (
                       <tr key={user.email} style={{ borderTop: "1px solid var(--border-glass)" }}>
                         <td style={td}>
-                          <div style={{ fontWeight: 700 }}>{user.email}</div>
-                          {user.bonus_builds > 0 && (
-                            <div style={{ color: "var(--neon-cyan)", fontSize: 12, marginTop: 3 }}>
-                              {user.bonus_builds} bonus AI builds
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {user.avatar_url && (
+                              <img
+                                src={user.avatar_url}
+                                alt=""
+                                width={28}
+                                height={28}
+                                style={{ borderRadius: "50%", flexShrink: 0 }}
+                              />
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              {user.name && (
+                                <div style={{ fontWeight: 700, color: "#fff" }}>{user.name}</div>
+                              )}
+                              <div style={{ fontWeight: user.name ? 400 : 700, fontSize: user.name ? 12 : 13, color: user.name ? "var(--text-muted)" : "#fff", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {user.email}
+                              </div>
+                              {user.signed_up_at && (
+                                <div style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 2 }}>
+                                  Signed up {formatDate(user.signed_up_at)}
+                                </div>
+                              )}
+                              {user.bonus_builds > 0 && (
+                                <div style={{ color: "var(--neon-cyan)", fontSize: 12, marginTop: 3 }}>
+                                  {user.bonus_builds} bonus AI builds
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </td>
                         <td style={td}>
-                          <div>{user.plan_name || "Unknown"}</div>
-                          <div style={{ color: "var(--text-muted)", fontSize: 12 }}>{user.source || "no source"}</div>
+                          <div>{user.plan_name || (user.signed_up_at ? "—" : "Unknown")}</div>
+                          <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                            {user.source || (user.auth_provider ? `Signed in (${user.auth_provider})` : "no source")}
+                          </div>
                         </td>
                         <td style={td}>
                           <StatusPill active={user.active} />

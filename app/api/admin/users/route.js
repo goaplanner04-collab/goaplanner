@@ -97,6 +97,11 @@ function getEventEmail(event) {
 function createUser(email) {
   return {
     email,
+    name: null,
+    avatar_url: null,
+    signed_up_at: null,
+    last_sign_in_at: null,
+    auth_provider: null,
     plan_name: null,
     source: null,
     expires_at: null,
@@ -113,6 +118,26 @@ function createUser(email) {
     most_used_feature: null,
     payments: [],
   };
+}
+
+async function listAuthUsers(supabase) {
+  // Pull every user who has ever signed in via Supabase Auth (Google etc.).
+  // Paginate up to ~5000 users.
+  const all = [];
+  for (let page = 1; page <= 5; page++) {
+    try {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) {
+        return { data: all, error };
+      }
+      const users = data?.users || [];
+      all.push(...users);
+      if (users.length < 1000) break;
+    } catch (err) {
+      return { data: all, error: err };
+    }
+  }
+  return { data: all, error: null };
 }
 
 function pickMostUsed(counts) {
@@ -154,11 +179,12 @@ export async function GET(req) {
     });
   }
 
-  const [passesRes, subscribersRes, analyticsRes, paymentsRes] = await Promise.all([
+  const [passesRes, subscribersRes, analyticsRes, paymentsRes, authUsersRes] = await Promise.all([
     readTable(supabase, "user_passes", { orderBy: "updated_at", limit: 5000 }),
     readTable(supabase, "email_subscribers", { orderBy: "created_at", limit: 5000 }),
     readTable(supabase, "analytics", { orderBy: "created_at", limit: 3000 }),
     readTable(supabase, "user_payments", { orderBy: "created_at", limit: 2000 }),
+    listAuthUsers(supabase),
   ]);
 
   const tableResults = {
@@ -178,6 +204,12 @@ export async function GET(req) {
       errors.push({ table, message: result.error.message || String(result.error) });
     }
   }
+  if (authUsersRes.error) {
+    errors.push({
+      table: "auth.users",
+      message: authUsersRes.error.message || String(authUsersRes.error),
+    });
+  }
 
   const users = new Map();
   const ensureUser = (email) => {
@@ -186,6 +218,24 @@ export async function GET(req) {
     if (!users.has(norm)) users.set(norm, createUser(norm));
     return users.get(norm);
   };
+
+  // Seed from Supabase Auth so every signed-in user appears, even if they
+  // have no payments / subscriptions / analytics events.
+  for (const authUser of authUsersRes.data || []) {
+    const email = normalizeEmail(authUser.email);
+    if (!email) continue;
+    const user = ensureUser(email);
+    if (!user) continue;
+    const meta = authUser.user_metadata || {};
+    user.name = meta.full_name || meta.name || null;
+    user.avatar_url = meta.avatar_url || meta.picture || null;
+    user.signed_up_at = safeDate(authUser.created_at);
+    user.last_sign_in_at = safeDate(authUser.last_sign_in_at);
+    user.auth_provider = authUser.app_metadata?.provider || null;
+    if (user.last_sign_in_at && (!user.last_seen_at || new Date(user.last_sign_in_at) > new Date(user.last_seen_at))) {
+      user.last_seen_at = user.last_sign_in_at;
+    }
+  }
 
   for (const row of passesRes.data) {
     const user = ensureUser(row.email);
@@ -281,8 +331,8 @@ export async function GET(req) {
   }
 
   const userList = Array.from(users.values()).sort((a, b) => {
-    const aTime = new Date(a.last_payment_at || a.last_seen_at || a.subscribed_at || 0).getTime();
-    const bTime = new Date(b.last_payment_at || b.last_seen_at || b.subscribed_at || 0).getTime();
+    const aTime = new Date(a.last_payment_at || a.last_seen_at || a.last_sign_in_at || a.subscribed_at || a.signed_up_at || 0).getTime();
+    const bTime = new Date(b.last_payment_at || b.last_seen_at || b.last_sign_in_at || b.subscribed_at || b.signed_up_at || 0).getTime();
     return bTime - aTime || a.email.localeCompare(b.email);
   });
 
