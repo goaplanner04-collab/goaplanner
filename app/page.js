@@ -117,35 +117,185 @@ export default function LandingPage() {
 
   // ── GATE: Show sign-in screen if not authenticated ────────────────
   if (authChecked && !user) {
+    const pills = [
+      { icon: "🔓", text: "One-time pass — no subscription" },
+      { icon: "✉️", text: "Plan and receipts emailed to your Gmail" },
+      { icon: "🔔", text: "Tonight's party alerts (opt out anytime)" },
+    ];
     return (
-      <main className="site-shell" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div className="glass-card" style={{ maxWidth: 460, width: "100%", padding: 32, textAlign: "center" }}>
-          <div className="brand-mark" style={{ justifyContent: "center", fontSize: 16, marginBottom: 20 }}>
-            <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
-            GoaNow
+      <main
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+          background:
+            "radial-gradient(ellipse at 50% 40%, rgba(255,45,120,0.04) 0%, #0A0A0F 60%)",
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            maxWidth: 480,
+            padding: "var(--gn-pad, 40px 36px)",
+            textAlign: "center",
+            background: "#0A0A0F",
+            border: "1px solid rgba(255,45,120,0.2)",
+            borderRadius: 24,
+            boxShadow:
+              "0 0 60px rgba(255,45,120,0.08), 0 0 120px rgba(0,245,255,0.04)",
+            overflow: "hidden",
+          }}
+        >
+          {/* Inner radial pulse */}
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(ellipse at 50% 0%, rgba(255,45,120,0.06) 0%, transparent 70%)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div style={{ position: "relative" }}>
+            {/* Logo row */}
+            <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
+              <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
+              <span
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 22,
+                  letterSpacing: 4,
+                  color: "#fff",
+                  marginLeft: 10,
+                }}
+              >
+                GOANOW
+              </span>
+            </div>
+
+            {/* Headline */}
+            <h1
+              style={{
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: "clamp(34px, 6vw, 42px)",
+                lineHeight: 1.1,
+                letterSpacing: 1,
+                margin: "0 0 16px",
+                textTransform: "uppercase",
+                textAlign: "center",
+              }}
+            >
+              <span style={{ color: "#FF2D78" }}>Your Goa </span>
+              <span style={{ color: "#fff" }}>concierge</span>
+              <span style={{ color: "#FF2D78" }}> in one tap.</span>
+            </h1>
+
+            {/* Subtitle */}
+            <p
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontWeight: 600,
+                fontSize: 16,
+                color: "#fff",
+                margin: "0 0 8px",
+              }}
+            >
+              GoaNow is a hyper-local guide for travellers in Goa.
+            </p>
+
+            {/* Description */}
+            <p
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontWeight: 400,
+                fontSize: 14,
+                color: "rgba(255,255,255,0.6)",
+                lineHeight: 1.6,
+                margin: "0 0 28px",
+              }}
+            >
+              Nearby cafes sorted by your real distance. Tonight's parties with crowd-arrival timing. An AI itinerary tailored to your area, vibe and budget — places verified open before they reach you.
+            </p>
+
+            {/* Continue label */}
+            <div
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: 11,
+                color: "rgba(255,255,255,0.4)",
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                marginBottom: 8,
+                textAlign: "center",
+              }}
+            >
+              Continue to GoaNow
+            </div>
+
+            {/* Google Sign In (functionality untouched) */}
+            <GoogleSignIn onUser={(u) => { if (u) setUser(u); }} />
+
+            {/* Divider */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "24px 0" }} />
+
+            {/* Feature pills */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: 8,
+                marginBottom: 28,
+              }}
+            >
+              {pills.map((p) => (
+                <span
+                  key={p.text}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 20,
+                    padding: "8px 16px",
+                    margin: 4,
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#fff",
+                  }}
+                >
+                  <span style={{ fontSize: 14, lineHeight: 1 }}>{p.icon}</span>
+                  <span style={{ color: "#00F5FF", fontWeight: 700, marginRight: 4 }}>✓</span>
+                  {p.text}
+                </span>
+              ))}
+            </div>
+
+            {/* Privacy note */}
+            <p
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: 11,
+                color: "rgba(255,255,255,0.3)",
+                lineHeight: 1.5,
+                marginTop: 20,
+                marginBottom: 0,
+                textAlign: "center",
+              }}
+            >
+              Sign in to continue. We use your email only for receipts, your itinerary, and party alerts.{" "}
+              <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>
+                Never sold or spammed.
+              </span>
+            </p>
           </div>
-
-          <h1 style={{ fontSize: 28, color: "var(--neon-pink)", margin: "0 0 10px", textShadow: "0 0 20px rgba(255,61,129,0.35)", lineHeight: 1.2 }}>
-            Your Goa concierge in one tap.
-          </h1>
-          <p style={{ color: "#d8dce8", fontSize: 14, lineHeight: 1.6, margin: "0 0 8px" }}>
-            GoaNow is a hyper-local guide for travellers in Goa.
-          </p>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, lineHeight: 1.65, margin: "0 0 22px" }}>
-            Nearby cafes sorted by your real distance. Tonight's parties with crowd-arrival timing. An AI itinerary tailored to your area, vibe and budget — places verified open before they reach you.
-          </p>
-
-          <GoogleSignIn onUser={(u) => { if (u) setUser(u); }} />
-
-          <ul style={{ listStyle: "none", margin: "22px 0 0", padding: 0, textAlign: "left", color: "#d8dce8", fontSize: 13, lineHeight: 1.9 }}>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> One-time pass — no subscription</li>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Plan and receipts emailed to your Gmail</li>
-            <li><span style={{ color: "var(--neon-cyan)" }}>✓</span> Tonight's party alerts (opt out anytime)</li>
-          </ul>
-
-          <p style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 22, lineHeight: 1.5 }}>
-            Sign in to continue. We use your email only for receipts, your itinerary, and party alerts. Never sold or spammed.
-          </p>
         </div>
       </main>
     );
