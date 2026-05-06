@@ -122,18 +122,29 @@ function createUser(email) {
 
 async function listAuthUsers(supabase) {
   // Pull every user who has ever signed in via Supabase Auth (Google etc.).
-  // Paginate up to ~5000 users.
+  // Paginate up to ~5000 users. Defensive about response shape — different
+  // supabase-js versions wrap data differently.
   const all = [];
+  if (!supabase?.auth?.admin?.listUsers) {
+    return { data: all, error: new Error("auth.admin.listUsers unavailable") };
+  }
   for (let page = 1; page <= 5; page++) {
     try {
-      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
-      if (error) {
-        return { data: all, error };
+      const result = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+      if (result?.error) {
+        console.error("listAuthUsers page", page, "error:", result.error);
+        return { data: all, error: result.error };
       }
-      const users = data?.users || [];
+      const data = result?.data;
+      const users = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.users)
+        ? data.users
+        : [];
       all.push(...users);
       if (users.length < 1000) break;
     } catch (err) {
+      console.error("listAuthUsers exception page", page, ":", err);
       return { data: all, error: err };
     }
   }

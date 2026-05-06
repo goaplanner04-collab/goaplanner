@@ -63,7 +63,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
-    if (!expiry) {
+    const email = (localStorage.getItem("goanow_email") || "").trim();
+    if (!expiry || !email) {
       router.replace("/");
       return;
     }

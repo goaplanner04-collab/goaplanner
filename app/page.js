@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import PaywallModal from "@/components/PaywallModal";
-import GoogleSignIn from "@/components/GoogleSignIn";
 import { getBrowserSupabase } from "@/lib/supabaseBrowser";
 
 const DEFAULT_PLANS = [
@@ -27,10 +26,12 @@ const PHOTO_TILES = [
 export default function LandingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [initialPlan, setInitialPlan] = useState("week");
+  const [autoAdvance, setAutoAdvance] = useState(false);
   const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [hasActivePass, setHasActivePass] = useState(false);
 
+  // Pricing
   useEffect(() => {
     fetch("/api/settings")
       .then((r) => r.json())
@@ -45,37 +46,20 @@ export default function LandingPage() {
       .catch(() => {});
   }, []);
 
+  // Auth state — used ONLY to decide which navbar button to show.
+  // The page never gates content behind sign-in.
   useEffect(() => {
     const sb = getBrowserSupabase();
-    if (!sb) {
-      setAuthChecked(true);
-      return;
-    }
+    if (!sb) return;
 
     let mounted = true;
-    let resolved = false;
 
-    // If the URL contains OAuth tokens we're mid-redirect — wait longer
-    // before declaring "no session" because supabase-js detects them async.
-    const url = typeof window !== "undefined" ? window.location.href : "";
-    const hasOAuthFragment =
-      url.includes("access_token=") ||
-      url.includes("refresh_token=") ||
-      url.includes("?code=") ||
-      url.includes("&code=");
-
-    const finish = async (u) => {
-      if (!mounted || resolved) return;
-      resolved = true;
+    const refresh = async (u) => {
+      if (!mounted) return;
       setUser(u || null);
-      setAuthChecked(true);
-
-      // If user is signed in, check the server for an active pass
-      // and auto-redirect to dashboard if one exists. This makes the
-      // pass survive sign-out / new device.
       if (u?.email) {
+        try { localStorage.setItem("goanow_email", u.email); } catch {}
         try {
-          localStorage.setItem("goanow_email", u.email);
           const res = await fetch(`/api/user/pass?email=${encodeURIComponent(u.email)}`);
           const data = await res.json();
           if (data?.active && data?.expiresAt) {
@@ -83,233 +67,62 @@ export default function LandingPage() {
             if (expiryMs > Date.now()) {
               localStorage.setItem("goanow_plan", data.planName || "Pass");
               localStorage.setItem("goanow_expiry", String(expiryMs));
-              window.location.replace("/dashboard");
+              if (mounted) setHasActivePass(true);
+              return;
             }
           }
+          if (mounted) setHasActivePass(false);
         } catch {}
       }
     };
 
-    // Auth state changes (fires when OAuth tokens are processed)
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) finish(session.user);
-    });
-
-    // Cached session check
-    sb.auth.getSession().then(({ data }) => {
-      if (data?.session?.user) {
-        finish(data.session.user);
-        return;
-      }
-      // No cached session yet. If URL had OAuth tokens, wait for the listener.
-      // Otherwise give up after a short timeout.
-      const fallback = hasOAuthFragment ? 3000 : 600;
-      setTimeout(() => finish(null), fallback);
+    sb.auth.getSession().then(({ data }) => refresh(data?.session?.user || null));
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e, session) => {
+      refresh(session?.user || null);
     });
 
     return () => { mounted = false; subscription?.unsubscribe(); };
   }, []);
 
+  // Resume the paywall flow after a Google OAuth redirect.
+  // PaywallModal stores the in-progress plan in sessionStorage before sign-in,
+  // and we re-open the modal automatically when we land back here signed in.
+  useEffect(() => {
+    if (!user?.email) return;
+    let pendingPlan = "";
+    try { pendingPlan = sessionStorage.getItem("goanow_pending_plan") || ""; } catch {}
+    if (!pendingPlan) return;
+    try { sessionStorage.removeItem("goanow_pending_plan"); } catch {}
+    setInitialPlan(pendingPlan);
+    setAutoAdvance(true);
+    setModalOpen(true);
+  }, [user?.email]);
+
   const openModal = (plan) => {
     setInitialPlan(plan);
+    setAutoAdvance(false);
     setModalOpen(true);
   };
 
-  // ── GATE: Show sign-in screen if not authenticated ────────────────
-  if (authChecked && !user) {
-    const pills = [
-      { icon: "🔓", text: "One-time pass — no subscription" },
-      { icon: "✉️", text: "Plan and receipts emailed to your Gmail" },
-      { icon: "🔔", text: "Tonight's party alerts (opt out anytime)" },
-    ];
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20,
-          background:
-            "radial-gradient(ellipse at 50% 40%, rgba(255,45,120,0.04) 0%, #0A0A0F 60%)",
-        }}
-      >
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: 480,
-            padding: "var(--gn-pad, 40px 36px)",
-            textAlign: "center",
-            background: "#0A0A0F",
-            border: "1px solid rgba(255,45,120,0.2)",
-            borderRadius: 24,
-            boxShadow:
-              "0 0 60px rgba(255,45,120,0.08), 0 0 120px rgba(0,245,255,0.04)",
-            overflow: "hidden",
-          }}
-        >
-          {/* Inner radial pulse */}
-          <div
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "radial-gradient(ellipse at 50% 0%, rgba(255,45,120,0.06) 0%, transparent 70%)",
-              pointerEvents: "none",
-            }}
-          />
+  const closeModal = () => {
+    setModalOpen(false);
+    setAutoAdvance(false);
+  };
 
-          <div style={{ position: "relative" }}>
-            {/* Logo row */}
-            <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 24 }}>
-              <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
-              <span
-                style={{
-                  fontFamily: "'Bebas Neue', sans-serif",
-                  fontSize: 22,
-                  letterSpacing: 4,
-                  color: "#fff",
-                  marginLeft: 10,
-                }}
-              >
-                GOANOW
-              </span>
-            </div>
-
-            {/* Headline */}
-            <h1
-              style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: "clamp(34px, 6vw, 42px)",
-                lineHeight: 1.1,
-                letterSpacing: 1,
-                margin: "0 0 16px",
-                textTransform: "uppercase",
-                textAlign: "center",
-              }}
-            >
-              <span style={{ color: "#FF2D78" }}>Your Goa </span>
-              <span style={{ color: "#fff" }}>concierge</span>
-              <span style={{ color: "#FF2D78" }}> in one tap.</span>
-            </h1>
-
-            {/* Subtitle */}
-            <p
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 600,
-                fontSize: 16,
-                color: "#fff",
-                margin: "0 0 8px",
-              }}
-            >
-              GoaNow is a hyper-local guide for travellers in Goa.
-            </p>
-
-            {/* Description */}
-            <p
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontWeight: 400,
-                fontSize: 14,
-                color: "rgba(255,255,255,0.6)",
-                lineHeight: 1.6,
-                margin: "0 0 28px",
-              }}
-            >
-              Nearby cafes sorted by your real distance. Tonight's parties with crowd-arrival timing. An AI itinerary tailored to your area, vibe and budget — places verified open before they reach you.
-            </p>
-
-            {/* Continue label */}
-            <div
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontSize: 11,
-                color: "rgba(255,255,255,0.4)",
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                marginBottom: 8,
-                textAlign: "center",
-              }}
-            >
-              Continue to GoaNow
-            </div>
-
-            {/* Google Sign In (functionality untouched) */}
-            <GoogleSignIn onUser={(u) => { if (u) setUser(u); }} />
-
-            {/* Divider */}
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "24px 0" }} />
-
-            {/* Feature pills */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                justifyContent: "center",
-                gap: 8,
-                marginBottom: 28,
-              }}
-            >
-              {pills.map((p) => (
-                <span
-                  key={p.text}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 20,
-                    padding: "8px 16px",
-                    margin: 4,
-                    fontFamily: "Inter, sans-serif",
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: "#fff",
-                  }}
-                >
-                  <span style={{ fontSize: 14, lineHeight: 1 }}>{p.icon}</span>
-                  <span style={{ color: "#00F5FF", fontWeight: 700, marginRight: 4 }}>✓</span>
-                  {p.text}
-                </span>
-              ))}
-            </div>
-
-            {/* Privacy note */}
-            <p
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontSize: 11,
-                color: "rgba(255,255,255,0.3)",
-                lineHeight: 1.5,
-                marginTop: 20,
-                marginBottom: 0,
-                textAlign: "center",
-              }}
-            >
-              Sign in to continue. We use your email only for receipts, your itinerary, and party alerts.{" "}
-              <span style={{ color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>
-                Never sold or spammed.
-              </span>
-            </p>
-          </div>
-        </div>
-      </main>
+  // Navbar button — Dashboard if signed in & paid, otherwise "Get Access"
+  const NavbarCTA = () =>
+    user && hasActivePass ? (
+      <a href="/dashboard" className="neon-btn-ghost" style={{ padding: "8px 14px", fontSize: 13, minHeight: 36 }}>
+        <Icon name="arrow-right" size={16} />
+        Go to Dashboard
+      </a>
+    ) : (
+      <button onClick={() => openModal("week")} className="neon-btn-ghost" style={{ padding: "8px 14px", fontSize: 13, minHeight: 36 }}>
+        <Icon name="ticket" size={16} />
+        Get Access
+      </button>
     );
-  }
 
-  if (!authChecked) {
-    return (
-      <main className="site-shell" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading…</div>
-      </main>
-    );
-  }
-
-  // ── Authenticated landing page ─────────────────────────────────────
   return (
     <main className="site-shell">
       <section className="landing-hero">
@@ -319,12 +132,11 @@ export default function LandingPage() {
               <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
               GoaNow
             </div>
-            <GoogleSignIn compact onUser={(u) => setUser(u)} />
+            <NavbarCTA />
           </div>
 
           <h1 className="hero-title">
-            Welcome{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name.split(" ")[0]}` : ""}
-            <span> to GoaNow.</span>
+            Your Goa concierge<span> in one tap.</span>
           </h1>
 
           <p className="hero-copy">
@@ -450,9 +262,9 @@ export default function LandingPage() {
 
       <PaywallModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         initialPlan={initialPlan}
-        prefillEmail={user?.email}
+        autoAdvance={autoAdvance}
       />
     </main>
   );
