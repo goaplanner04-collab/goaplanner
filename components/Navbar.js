@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import GoogleSignIn from "@/components/GoogleSignIn";
+import { getTrialStatus, formatCountdown } from "@/lib/trialUtils";
 
 export default function Navbar({ showPlanBadge = false }) {
   const [planInfo, setPlanInfo] = useState(null);
+  const [trialMs, setTrialMs] = useState(null);
 
+  // Plan badge (paid users)
   useEffect(() => {
     if (!showPlanBadge) return;
     if (typeof window === "undefined") return;
@@ -39,6 +42,23 @@ export default function Navbar({ showPlanBadge = false }) {
     return () => clearInterval(timer);
   }, [showPlanBadge]);
 
+  // Trial countdown — ticks every second
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const tick = () => {
+      const status = getTrialStatus();
+      if (status.active) setTrialMs(status.remainingMs);
+      else setTrialMs(null);
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const trialUrgent = trialMs !== null && trialMs <= 2 * 60 * 1000;
+
   return (
     <header
       style={{
@@ -70,6 +90,41 @@ export default function Navbar({ showPlanBadge = false }) {
         </a>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {trialMs !== null && (
+            <div
+              className={trialUrgent ? "gn-trial-pill gn-trial-urgent" : "gn-trial-pill"}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "rgba(255,255,255,0.06)",
+                border: trialUrgent ? "1px solid rgba(255,68,68,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 20,
+                padding: "5px 12px",
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: trialUrgent ? "#FF4444" : "#00F5FF",
+                  display: "inline-block",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  color: trialUrgent ? "#FF6B6B" : "#fff",
+                }}
+              >
+                {formatCountdown(trialMs)} free
+              </span>
+            </div>
+          )}
+
           {showPlanBadge && planInfo && (
             <div
               style={{
@@ -104,6 +159,16 @@ export default function Navbar({ showPlanBadge = false }) {
           />
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes urgentPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        .gn-trial-urgent {
+          animation: urgentPulse 1s infinite;
+        }
+      `}</style>
     </header>
   );
 }

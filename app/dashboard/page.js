@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Icon from "@/components/Icon";
@@ -9,8 +9,11 @@ import EventCard from "@/components/EventCard";
 import ItineraryBuilder from "@/components/ItineraryBuilder";
 import LoadingSkeleton, { PulsingDotLoader } from "@/components/LoadingSkeleton";
 import ShareButton from "@/components/ShareButton";
+import TrialPaywall from "@/components/TrialPaywall";
+import PaywallModal from "@/components/PaywallModal";
 import { getDistanceKm } from "@/lib/haversine";
 import { getSavedTheme, applyTheme } from "@/lib/theme";
+import { hasPaidAccess, getTrialStatus, startTrial, formatCountdown } from "@/lib/trialUtils";
 
 const TABS = [
   { key: "nearby", label: "📍 Nearby", icon: null },
@@ -59,21 +62,86 @@ export default function DashboardPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
   const [tab, setTab] = useState("nearby");
+  const [trialExpired, setTrialExpired] = useState(false);
+  const [trialMs, setTrialMs] = useState(null);
+  const [showUnlockToast, setShowUnlockToast] = useState(false);
+  const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const wasTrialExpiredRef = useRef(false);
 
+  // Auth gate — allow paid users AND trial users (active or expired).
+  // The TrialPaywall overlay handles the lockout when trial is up.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
     const email = (localStorage.getItem("goanow_email") || "").trim();
-    if (!expiry || !email) {
+    if (!email) {
       router.replace("/");
       return;
     }
-    if (expiry <= Date.now()) {
+    // Make sure a trial has started for signed-in users with no paid pass
+    startTrial();
+
+    const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
+    const trialStart = localStorage.getItem("goanow_trial_start");
+    const hasPaidValid = expiry && expiry > Date.now();
+    const expiredPaid = expiry && expiry <= Date.now();
+
+    if (expiredPaid) {
       router.replace("/expired");
+      return;
+    }
+    if (!hasPaidValid && !trialStart) {
+      router.replace("/");
       return;
     }
     setAuthChecked(true);
   }, [router]);
+
+  // Trial state polling — checks every second for the banner countdown
+  // and every 3 seconds for hard expiry.
+  useEffect(() => {
+    if (!authChecked) return;
+
+    const checkExpiry = () => {
+      if (hasPaidAccess()) {
+        // Just transitioned from "expired trial" → "paid"
+        if (wasTrialExpiredRef.current) {
+          setShowUnlockToast(true);
+          setTimeout(() => setShowUnlockToast(false), 3000);
+        }
+        wasTrialExpiredRef.current = false;
+        setTrialExpired(false);
+        return;
+      }
+      const status = getTrialStatus();
+      if (status.active) {
+        setTrialExpired(false);
+        wasTrialExpiredRef.current = false;
+        setTrialMs(status.remainingMs);
+      } else if (status.reason !== "no_trial" && status.reason !== "ssr") {
+        wasTrialExpiredRef.current = true;
+        setTrialExpired(true);
+        setTrialMs(null);
+      }
+    };
+
+    // Show toast on initial load if user just paid via the trial paywall
+    try {
+      const flag = sessionStorage.getItem("goanow_pending_unlock");
+      if (flag && hasPaidAccess()) {
+        sessionStorage.removeItem("goanow_pending_unlock");
+        setShowUnlockToast(true);
+        setTimeout(() => setShowUnlockToast(false), 3000);
+      }
+    } catch {}
+
+    checkExpiry();
+    const tickFast = setInterval(() => {
+      const status = getTrialStatus();
+      if (status.active) setTrialMs(status.remainingMs);
+    }, 1000);
+    const tickSlow = setInterval(checkExpiry, 3000);
+    return () => { clearInterval(tickFast); clearInterval(tickSlow); };
+  }, [authChecked]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -100,14 +168,59 @@ export default function DashboardPage() {
     );
   }
 
+  const trialBannerActive = !hasPaidAccess() && trialMs !== null;
+
   return (
     <main style={{ minHeight: "100vh", paddingBottom: 100 }}>
+      {/* HARD BLOCK — overlay over everything when trial is up and not paid */}
+      {trialExpired && !hasPaidAccess() && <TrialPaywall />}
+
       <Navbar showPlanBadge />
+
+      {/* TRIAL BANNER — only when active trial */}
+      {trialBannerActive && (
+        <div
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(0,245,255,0.08) 0%, rgba(255,45,120,0.08) 100%)",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            padding: "9px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            position: "sticky",
+            top: 60,
+            zIndex: 41,
+          }}
+        >
+          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 13, color: "#fff" }}>
+            ⏱ {formatCountdown(trialMs)} of free trial left
+          </div>
+          <button
+            onClick={() => setBannerModalOpen(true)}
+            style={{
+              background: "#FF2D78",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 12px",
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 600,
+              fontSize: 12,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Unlock Rs 8
+          </button>
+        </div>
+      )}
 
       <nav
         style={{
           position: "sticky",
-          top: 60,
+          top: trialBannerActive ? 100 : 60,
           zIndex: 40,
           background: "var(--surface-strong)",
           backdropFilter: "blur(16px)",
@@ -137,6 +250,37 @@ export default function DashboardPage() {
       </div>
 
       <ShareButton />
+
+      {/* Banner button modal — opens day pass for trial users */}
+      <PaywallModal
+        open={bannerModalOpen}
+        onClose={() => setBannerModalOpen(false)}
+        initialPlan="day"
+        autoAdvance={true}
+      />
+
+      {/* Success toast after payment */}
+      {showUnlockToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#FF2D78",
+            color: "#fff",
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 600,
+            fontSize: 14,
+            padding: "12px 24px",
+            borderRadius: 12,
+            zIndex: 10000,
+            boxShadow: "0 0 20px rgba(255,45,120,0.4)",
+          }}
+        >
+          Access unlocked! 🎉
+        </div>
+      )}
     </main>
   );
 }

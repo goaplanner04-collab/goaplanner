@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getBrowserSupabase } from "@/lib/supabaseBrowser";
+import { startTrial } from "@/lib/trialUtils";
 
 export default function AuthCallbackPage() {
   const [status, setStatus] = useState("Signing you in…");
@@ -22,6 +23,7 @@ export default function AuthCallbackPage() {
         const { data } = await sb.auth.getSession();
         if (data?.session?.user) {
           try { localStorage.setItem("goanow_email", data.session.user.email || ""); } catch {}
+          startTrial();
           window.location.replace("/");
           return;
         }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import PaywallModal from "@/components/PaywallModal";
 import { getBrowserSupabase } from "@/lib/supabaseBrowser";
+import { startTrial } from "@/lib/trialUtils";
 
 const DEFAULT_PLANS = [
   { key: "day",  name: "Day Pass",  price: 49,  duration: "24 hours",  popular: false },
@@ -97,6 +98,7 @@ export default function LandingPage() {
       setUser(u || null);
       if (u?.email) {
         try { localStorage.setItem("goanow_email", u.email); } catch {}
+        startTrial();
         try {
           const res = await fetch(`/api/user/pass?email=${encodeURIComponent(u.email)}`);
           const data = await res.json();
