@@ -23,7 +23,7 @@ export default function AuthCallbackPage() {
         const { data } = await sb.auth.getSession();
         if (data?.session?.user) {
           try { localStorage.setItem("goanow_email", data.session.user.email || ""); } catch {}
-          startTrial();
+          // Trial does NOT start here — user chooses on the dashboard interstitial.
           window.location.replace("/");
           return;
         }

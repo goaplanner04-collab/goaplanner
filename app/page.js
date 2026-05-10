@@ -1,93 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import PaywallModal from "@/components/PaywallModal";
 import { getBrowserSupabase } from "@/lib/supabaseBrowser";
-import { startTrial } from "@/lib/trialUtils";
 
-const DEFAULT_PLANS = [
-  { key: "day",  name: "Day Pass",  price: 49,  duration: "24 hours",  popular: false },
-  { key: "week", name: "Week Pass", price: 8,   duration: "7 days",    popular: true  },
-  { key: "trip", name: "Trip Pass", price: 149, duration: "30 days",   popular: false },
-];
-
-const PROBLEMS = [
-  {
-    icon: "😤",
-    title: "Google sent you somewhere 8km away",
-    body: "There was a better cafe 300 meters from where you were standing. Google just doesn't know you're standing there.",
-  },
-  {
-    icon: "😴",
-    title: "You showed up to a dead party",
-    body: "The flyer said 10 PM. You arrived at 10. Empty venue. Bartender looked at you. Real crowd comes at midnight. Nobody tells tourists this.",
-  },
-  {
-    icon: "🤷",
-    title: "ChatGPT gave you the same 5 spots",
-    body: "Baga Beach. Tito's Lane. Calangute. Every tourist gets the same list. The real Goa is somewhere else entirely.",
-  },
-];
-
-const INSIDER_TIPS = [
-  {
-    title: "🌊 The Open Sea Package",
-    body: "Ask any Goa speedboat guy for the 'open sea package'. Rs 1,500 for 2 people. You ride out 3km and swim in the middle of the Arabian Sea. Not advertised anywhere.",
-  },
-  {
-    title: "🏖️ Sweet Water Lake, Arambol",
-    body: "10 minute walk behind Arambol beach. Freshwater lake. Almost zero tourists. Free. One of Goa's most magical spots. 90% of tourists never find it.",
-  },
-  {
-    title: "🎉 Hilltop Vagator — Tuesday Night",
-    body: "The best psy trance party in Goa. Every Tuesday. Outdoor. Legendary. Crowd arrives after midnight. Show up before 11 and you're alone.",
-  },
-  {
-    title: "🎰 Deltin Royale Casino",
-    body: "Rs 3,000 entry. Includes Rs 1,500 gaming credits + unlimited food + unlimited drinks. On a boat on the Mandovi River. Most underrated night out in all of Goa.",
-  },
-];
-
-const ICON_GRID = [
-  { icon: "🏨", label: "Hotels" },
-  { icon: "🌊", label: "Water Sports" },
-  { icon: "🛕", label: "Tourist Spots" },
-  { icon: "🛵", label: "Rentals" },
-  { icon: "🌿", label: "Hidden Gems" },
-  { icon: "🦞", label: "Seafood" },
-];
+const PLANS = {
+  day:  { key: "day",  name: "DAY PASS",  duration: "24 hours", price: 8 },
+  week: { key: "week", name: "WEEK PASS", duration: "7 days",   price: 21 },
+  trip: { key: "trip", name: "TRIP PASS", duration: "19 days",  price: 59 },
+};
 
 export default function LandingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [initialPlan, setInitialPlan] = useState("week");
   const [autoAdvance, setAutoAdvance] = useState(false);
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
+  const [selectedPlan, setSelectedPlan] = useState("week");
   const [user, setUser] = useState(null);
   const [hasActivePass, setHasActivePass] = useState(false);
 
-  // ── pricing fetch ────────────────────────────────────────────────
-  useEffect(() => {
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.pricing) {
-          setPlans(["day", "week", "trip"].map((key) => {
-            const p = d.pricing[key] || {};
-            return {
-              key,
-              name: p.name || key,
-              price: p.price,
-              duration: p.label,
-              popular: !!p.popular,
-            };
-          }));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // ── Supabase auth (used only for the navbar CTA) ─────────────────
+  // ── auth state for nav button ─────────────────────────────────
   useEffect(() => {
     const sb = getBrowserSupabase();
     if (!sb) return;
@@ -98,7 +30,6 @@ export default function LandingPage() {
       setUser(u || null);
       if (u?.email) {
         try { localStorage.setItem("goanow_email", u.email); } catch {}
-        startTrial();
         try {
           const res = await fetch(`/api/user/pass?email=${encodeURIComponent(u.email)}`);
           const data = await res.json();
@@ -123,7 +54,7 @@ export default function LandingPage() {
     return () => { mounted = false; subscription?.unsubscribe(); };
   }, []);
 
-  // ── auto-resume modal after OAuth redirect ───────────────────────
+  // ── resume modal after OAuth redirect ─────────────────────────
   useEffect(() => {
     if (!user?.email) return;
     let pendingPlan = "";
@@ -135,17 +66,17 @@ export default function LandingPage() {
     setModalOpen(true);
   }, [user?.email]);
 
-  // ── fade-up on scroll ────────────────────────────────────────────
+  // ── fade-up on scroll for cards ───────────────────────────────
   useEffect(() => {
-    const els = document.querySelectorAll(".gn-fade");
+    const els = document.querySelectorAll(".gn-rev");
     if (!els.length || typeof IntersectionObserver === "undefined") {
-      els.forEach((el) => el.classList.add("is-visible"));
+      els.forEach((el) => el.classList.add("is-vis"));
       return;
     }
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
+          entry.target.classList.add("is-vis");
           obs.unobserve(entry.target);
         }
       });
@@ -161,314 +92,224 @@ export default function LandingPage() {
   };
   const closeModal = () => { setModalOpen(false); setAutoAdvance(false); };
 
-  const scrollToHow = (e) => {
-    e.preventDefault();
-    document.getElementById("how")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  // ── pricing strings ──────────────────────────────────────────────
-  const planByKey = useMemo(() => {
-    const map = {};
-    plans.forEach((p) => { map[p.key] = p; });
-    return map;
-  }, [plans]);
-
-  const pricingNote = `Rs ${planByKey.day?.price ?? "—"} for a day · Rs ${planByKey.week?.price ?? "—"} for a week · Rs ${planByKey.trip?.price ?? "—"} for a month`;
-
   const navCTA = user && hasActivePass ? (
-    <a href="/dashboard" className="gn-pink-btn" style={{ padding: "10px 18px", fontSize: 14, height: 40 }}>
-      Dashboard →
-    </a>
+    <a href="/dashboard" className="gn-nav-btn">Dashboard →</a>
   ) : (
-    <button onClick={() => openModal("week")} className="gn-pink-btn" style={{ padding: "10px 18px", fontSize: 14, height: 40 }}>
-      Get Access
-    </button>
+    <button onClick={() => openModal("week")} className="gn-nav-btn">Get Access</button>
   );
 
+  const sel = PLANS[selectedPlan] || PLANS.week;
+  const payColors = {
+    day:  { bg: "var(--cyan)", color: "#0A0A0F", glow: "0 0 28px rgba(0,245,255,0.3)" },
+    week: { bg: "var(--pink)", color: "#fff",    glow: "0 0 28px rgba(255,45,120,0.4)" },
+    trip: { bg: "var(--gold)", color: "#0A0A0F", glow: "0 0 28px rgba(255,215,0,0.3)" },
+  }[selectedPlan];
+
   return (
-    <main className="gn-page">
+    <main className="gn-root">
       {/* ─────── NAVBAR ─────── */}
-      <nav className="gn-navbar">
-        <div className="gn-navbar-inner">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#fff", letterSpacing: 3 }}>
-              GOANOW
-            </span>
+      <nav className="gn-nav">
+        <div className="gn-nav-inner">
+          <div className="gn-brand">
+            <span className="brand-mark__icon"><Icon name="sun" size={18} /></span>
+            <span className="gn-brand-text">GOANOW</span>
           </div>
           {navCTA}
         </div>
       </nav>
 
-      {/* ─────── HERO ─────── */}
+      {/* ─────── HERO (fits in one viewport) ─────── */}
       <section className="gn-hero">
-        <div className="gn-hero-content">
-          <div className="gn-eyebrow gn-eyebrow-pink gn-fade">
-            <span className="gn-pulse-dot" />
-            Updated daily for Goa tourists
-          </div>
-
-          <h1 className="gn-h1 gn-fade">
-            <span style={{ color: "#fff" }}>STOP GUESSING</span>
-            <br />
-            <span style={{ color: "var(--gn-pink)" }}>IN GOA.</span>
-          </h1>
-
-          <p className="gn-subhead gn-fade">
-            Google shows what's popular.<br />
-            We show what's nearest, open, and actually worth your time — right now.
-          </p>
-
-          <p className="gn-body gn-fade">
-            Nearby cafes sorted by your real GPS distance. Tonight's parties with real crowd timing. An AI itinerary built from live Google Maps data — only open places, real prices, hidden gems.
-          </p>
-
-          <div className="gn-chip-row gn-fade">
-            <span className="gn-chip">📍 GPS-accurate spots</span>
-            <span className="gn-chip">🎉 Updated nightly</span>
-            <span className="gn-chip">🗺️ AI-powered plans</span>
-          </div>
-
-          <div className="gn-cta-stack gn-fade">
-            <button onClick={() => openModal("week")} className="gn-pink-btn gn-pink-btn-lg">
-              Get Full Access →
-            </button>
-            <a href="#how" onClick={scrollToHow} className="gn-ghost-btn">
-              See how it works ↓
-            </a>
-          </div>
-
-          <p className="gn-pricing-note gn-fade">
-            {pricingNote}<br />
-            <span style={{ color: "rgba(255,255,255,0.4)" }}>One-time. No subscription. No hidden fees.</span>
-          </p>
+        <div className="gn-live-badge">
+          <span className="gn-live-dot" />
+          Updated daily for Goa tourists
         </div>
 
-        <div className="gn-scroll-indicator" aria-hidden>↓</div>
+        <h1 className="gn-h1">
+          <span style={{ color: "#fff" }}>STOP GUESSING</span>
+          <br />
+          <span style={{ color: "var(--pink)", textShadow: "0 0 40px rgba(255,45,120,0.35)" }}>IN GOA.</span>
+        </h1>
+
+        <p className="gn-prop">
+          Google shows popular.<br />
+          GoaNow shows nearest, open, right now.
+        </p>
+
+        <p className="gn-support">
+          Cafes, parties, beaches, hotels —<br />
+          sorted by your GPS. Updated every night.
+        </p>
+
+        <button onClick={() => openModal("week")} className="gn-hero-cta">
+          Get Full Access →
+        </button>
+
+        <div className="gn-price-hint">
+          Rs 8 for today · Rs 21 for a week · Rs 59 for a month<br />
+          <span style={{ color: "rgba(255,255,255,0.35)" }}>One-time. No subscription.</span>
+        </div>
       </section>
 
-      {/* ─────── PROBLEM ─────── */}
-      <section id="how" className="gn-section gn-section-alt">
-        <div className="gn-container">
-          <div className="gn-eyebrow gn-eyebrow-cyan gn-fade">WHY TOURISTS STRUGGLE IN GOA</div>
-          <h2 className="gn-h2 gn-fade">SOUND FAMILIAR?</h2>
-
-          <div className="gn-problem-stack">
-            {PROBLEMS.map((p) => (
-              <div key={p.title} className="gn-problem-card gn-fade">
-                <div style={{ fontSize: 26, lineHeight: 1, marginBottom: 6 }}>{p.icon}</div>
-                <div className="gn-problem-title">{p.title}</div>
-                <div className="gn-problem-body">{p.body}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="gn-fade" style={{ textAlign: "center", marginTop: 32 }}>
-            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "var(--gn-pink)", letterSpacing: 1 }}>
-              GoaNow fixes all three.
-            </div>
-            <div className="gn-bounce-arrow" aria-hidden>↓</div>
-          </div>
+      {/* ─────── COMPARISON LINE ─────── */}
+      <section className="gn-compare">
+        <div className="gn-divider" />
+        <div className="gn-compare-text">
+          <div style={{ color: "var(--muted)" }}>GOOGLE SHOWS WHAT'S POPULAR.</div>
+          <div style={{ color: "#fff" }}>WE SHOW WHAT'S NEAREST.</div>
+          <div style={{ color: "var(--pink)" }}>RIGHT NOW. FROM WHERE YOU STAND.</div>
         </div>
       </section>
 
       {/* ─────── FEATURES ─────── */}
-      <section className="gn-section">
-        <div className="gn-container">
-          <div className="gn-eyebrow gn-eyebrow-cyan gn-fade">WHAT YOU GET</div>
-          <h2 className="gn-h2 gn-fade">
-            EVERYTHING YOU NEED.<br />
-            <span style={{ color: "rgba(255,255,255,0.55)" }}>NOTHING YOU DON'T.</span>
-          </h2>
+      <section className="gn-features">
+        <div className="gn-eyebrow gn-eyebrow-cyan">WHAT YOU GET</div>
+        <h2 className="gn-h2">EVERYTHING.<br />IN ONE TAP.</h2>
 
-          {/* FEATURE 1 — NEARBY */}
-          <div className="gn-feat-card gn-feat-cyan gn-fade">
+        <div className="gn-feat-stack">
+          {/* CARD 1 — NEARBY */}
+          <div className="gn-feat-card gn-feat-cyan gn-rev" style={{ "--d": "0ms" }}>
             <div className="gn-feat-head">
-              <span className="gn-icon-badge gn-icon-badge-cyan">📍</span>
-              <span className="gn-cat-tag" style={{ color: "var(--gn-cyan)" }}>NEARBY SPOTS</span>
+              <span className="gn-feat-icon" style={{ background: "rgba(0,245,255,0.10)" }}>📍</span>
+              <span className="gn-feat-cat" style={{ color: "var(--cyan)" }}>NEARBY SPOTS</span>
             </div>
-            <h3 className="gn-feat-title">Sorted by where you're standing.</h3>
-            <p className="gn-feat-body">
-              Cafes, restobars, beaches, water sports, hotels, and scooter rentals — all sorted by your exact GPS location. Not Google's guess. Your real distance. Right now.
-            </p>
+            <div className="gn-feat-title">SORTED BY WHERE<br />YOU'RE STANDING.</div>
+            <div className="gn-feat-body">
+              Not Google's popular. Your real distance.<br />
+              4.0+ rated. Live open/closed. Real photos.
+            </div>
             <div className="gn-pill-row">
-              <span className="gn-mini-pill">4.0+ rated only</span>
-              <span className="gn-mini-pill">Live open/closed</span>
-              <span className="gn-mini-pill">Real photos</span>
+              <span className="gn-pill">GPS-accurate</span>
+              <span className="gn-pill">Live status</span>
+              <span className="gn-pill">Real photos</span>
             </div>
           </div>
 
-          {/* FEATURE 2 — PARTIES */}
-          <div className="gn-feat-card gn-feat-pink gn-fade">
+          {/* CARD 2 — PARTIES */}
+          <div className="gn-feat-card gn-feat-pink gn-rev" style={{ "--d": "80ms" }}>
             <div className="gn-feat-head">
-              <span className="gn-icon-badge gn-icon-badge-pink">🎉</span>
-              <span className="gn-cat-tag" style={{ color: "var(--gn-pink)" }}>TONIGHT'S PARTIES</span>
+              <span className="gn-feat-icon" style={{ background: "rgba(255,45,120,0.10)" }}>🎉</span>
+              <span className="gn-feat-cat" style={{ color: "var(--pink)" }}>TONIGHT'S PARTIES</span>
             </div>
-            <h3 className="gn-feat-title">Know before you go.</h3>
-            <p className="gn-feat-body">
-              Our team checks 10+ Goa party Instagram accounts every evening. You get the venue, entry fee, and the one thing nobody else tells you — when the crowd actually arrives.
-            </p>
-            <div className="gn-highlight gn-highlight-pink">
-              🕐 Party says 10 PM. We tell you: crowd arrives at midnight. Don't show up before 12 AM.
+            <div className="gn-feat-title">KNOW BEFORE<br />YOU GO.</div>
+            <div className="gn-feat-body">
+              Human-curated nightly. Real entry fees.<br />
+              Real crowd timing — not what the flyer says.
+            </div>
+            <div className="gn-callout gn-callout-pink">
+              🕐 Flyer says 10 PM.<br />Real crowd: midnight.
             </div>
             <div className="gn-pill-row">
-              <span className="gn-mini-pill">Entry fees</span>
-              <span className="gn-mini-pill">Crowd timing</span>
-              <span className="gn-mini-pill">Insider tips</span>
+              <span className="gn-pill">Entry fees</span>
+              <span className="gn-pill">Crowd timing</span>
+              <span className="gn-pill">Daily update</span>
             </div>
           </div>
 
-          {/* FEATURE 3 — AI ITINERARY */}
-          <div className="gn-feat-card gn-feat-gold gn-fade">
+          {/* CARD 3 — AI ITINERARY */}
+          <div className="gn-feat-card gn-feat-gold gn-rev" style={{ "--d": "160ms" }}>
             <div className="gn-feat-head">
-              <span className="gn-icon-badge gn-icon-badge-gold">🗺️</span>
-              <span className="gn-cat-tag" style={{ color: "var(--gn-gold)" }}>AI ITINERARY</span>
+              <span className="gn-feat-icon" style={{ background: "rgba(255,215,0,0.10)" }}>🗺️</span>
+              <span className="gn-feat-cat" style={{ color: "var(--gold)" }}>AI ITINERARY</span>
             </div>
-            <h3 className="gn-feat-title">Your trip planned in 60 seconds.</h3>
-            <p className="gn-feat-body">
-              Tell the AI where you're staying, your budget, how many days, and what you feel like doing. It fetches live Google Maps data for your exact area — only places that are open right now, at their real distance from you.
-            </p>
-            <div className="gn-highlight gn-highlight-gold">
-              <em style={{ color: "var(--gn-muted)" }}>"I'm in Morjim, 3 days, Rs 5000, want beaches and a party"</em>
-              <div style={{ color: "#fff", marginTop: 6 }}>→ Full day-by-day plan with real places, real distances, real prices.</div>
+            <div className="gn-feat-title">YOUR TRIP IN<br />60 SECONDS.</div>
+            <div className="gn-feat-body">
+              Tell it your area, budget, vibe. It fetches<br />
+              live Google data — only open, only nearby.
+            </div>
+            <div className="gn-callout gn-callout-gold">
+              <em style={{ color: "var(--muted)", fontSize: 12 }}>"Morjim, 3 days, Rs 5000, party + beach"</em>
+              <div style={{ color: "#fff", fontSize: 13, marginTop: 4 }}>→ Full day-by-day plan. Real prices.</div>
             </div>
             <div className="gn-pill-row">
-              <span className="gn-mini-pill">Live Google data</span>
-              <span className="gn-mini-pill">Real distances</span>
-              <span className="gn-mini-pill">Hidden gems</span>
-            </div>
-          </div>
-
-          {/* FEATURE 4 — EVERYTHING ELSE */}
-          <div className="gn-feat-card gn-feat-violet gn-fade">
-            <div className="gn-feat-head">
-              <span className="gn-icon-badge gn-icon-badge-violet">✨</span>
-              <span className="gn-cat-tag" style={{ color: "#A78BFA" }}>AND MORE</span>
-            </div>
-            <h3 className="gn-feat-title">One platform. All of Goa.</h3>
-            <p className="gn-feat-body">
-              Hotels sorted by your area. Water sports with real pricing. Tourist spots, forts, temples, treks. Scooter rentals nearest to you. Hidden gems most tourists never find.
-            </p>
-            <div className="gn-icon-grid">
-              {ICON_GRID.map((it) => (
-                <div key={it.label} className="gn-icon-cell">
-                  <div style={{ fontSize: 24, marginBottom: 4 }}>{it.icon}</div>
-                  <div>{it.label}</div>
-                </div>
-              ))}
+              <span className="gn-pill">Live Google data</span>
+              <span className="gn-pill">Real distances</span>
+              <span className="gn-pill">Hidden gems</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─────── INSIDER KNOWLEDGE ─────── */}
-      <section className="gn-section gn-section-alt">
-        <div className="gn-container">
-          <div className="gn-eyebrow gn-eyebrow-pink gn-fade">REAL GOA KNOWLEDGE</div>
-          <h2 className="gn-h2 gn-fade">THINGS GOOGLE WON'T TELL YOU.</h2>
-
-          <div className="gn-insight-stack">
-            {INSIDER_TIPS.map((t) => (
-              <div key={t.title} className="gn-insight-card gn-fade">
-                <div className="gn-insight-title">{t.title}</div>
-                <div className="gn-insight-body">{t.body}</div>
-              </div>
-            ))}
+      {/* ─────── QUOTE ─────── */}
+      <section className="gn-quote-wrap">
+        <div className="gn-quote-card gn-rev">
+          <span className="gn-quote-mark">&ldquo;</span>
+          <div className="gn-quote-text">
+            GoaNow told me the crowd comes at midnight. I showed up at midnight. Best night of my Goa trip.
           </div>
-
-          <p className="gn-fade" style={{ textAlign: "center", marginTop: 24, color: "var(--gn-muted)", fontFamily: "Inter", fontSize: 14 }}>
-            GoaNow has 50+ insider tips like these built into every AI itinerary.
-          </p>
+          <div className="gn-attr">
+            <span className="gn-attr-dot" />
+            Riya S. · Vagator, Goa
+          </div>
         </div>
+        <div className="gn-quote-foot">50+ insider tips built into every AI plan.</div>
       </section>
 
-      {/* ─────── PRICING ─────── */}
-      <section id="pricing" className="gn-section">
-        <div className="gn-container">
-          <div className="gn-eyebrow gn-eyebrow-cyan gn-fade">SIMPLE PRICING</div>
-          <h2 className="gn-h2 gn-fade">ONE-TIME. NO SUBSCRIPTION.</h2>
-          <p className="gn-fade" style={{ color: "var(--gn-muted)", fontFamily: "Inter", fontSize: 15, margin: "0 0 24px" }}>
-            One bad party entry costs more than this.
-          </p>
+      {/* ─────── PRICING + PAY ─────── */}
+      <section className="gn-pricing">
+        <div className="gn-eyebrow gn-eyebrow-cyan">SIMPLE PRICING</div>
+        <h2 className="gn-h2">ONE-TIME.<br />NO SUBSCRIPTION.</h2>
+        <p className="gn-pricing-sub">One bad party entry costs more than this.</p>
 
-          <div className="gn-price-stack">
-            {plans.map((p) => {
-              const perDay = p.key === "week" && p.price ? (p.price / 7).toFixed(2)
-                : p.key === "trip" && p.price ? (p.price / 30).toFixed(2)
-                : null;
-              const subline = p.key === "day" ? "for 24 hours"
-                : perDay ? `≈ Rs ${perDay} per day`
-                : p.duration;
-              return (
-                <div key={p.key} className={`gn-price-card ${p.popular ? "gn-price-card-popular" : ""} gn-fade`}>
-                  {p.popular && <div className="gn-popular-badge">MOST POPULAR</div>}
-                  <div className="gn-price-name">{p.name}</div>
-                  <div className="gn-price-duration">{p.duration}</div>
-                  <div className="gn-price-amount" style={{ color: p.popular ? "var(--gn-pink)" : "#fff" }}>
-                    Rs {p.price}
+        <div className="gn-plans">
+          {Object.values(PLANS).map((p, i) => {
+            const isSel = selectedPlan === p.key;
+            const accent = p.key === "week" ? "var(--pink)" : p.key === "day" ? "var(--cyan)" : "var(--gold)";
+            const accentBg = p.key === "week" ? "rgba(255,45,120,0.07)" : p.key === "day" ? "rgba(0,245,255,0.05)" : "rgba(255,215,0,0.05)";
+            const perDay = p.key === "week" ? "≈ Rs 3 per day"
+              : p.key === "trip" ? "≈ Rs 2 per day"
+              : "for today only";
+            return (
+              <button
+                type="button"
+                key={p.key}
+                onClick={() => setSelectedPlan(p.key)}
+                className={`gn-plan ${isSel ? "is-sel" : ""} gn-rev`}
+                style={{
+                  "--d": `${i * 80}ms`,
+                  border: isSel ? `2px solid ${accent}` : "1.5px solid var(--border)",
+                  background: isSel ? accentBg : "rgba(255,255,255,0.04)",
+                  boxShadow: isSel && p.key === "week" ? "0 0 20px rgba(255,45,120,0.10)" : "none",
+                }}
+              >
+                {p.key === "week" && <span className="gn-popular-tag">MOST POPULAR</span>}
+                <div className="gn-plan-top">
+                  <div>
+                    <div className="gn-plan-name">{p.name}</div>
+                    <div className="gn-plan-dur">{p.duration}</div>
                   </div>
-                  <div className="gn-price-subline">{subline}</div>
-                  <div className="gn-price-divider" />
-                  <ul className="gn-price-features">
-                    <li><span style={{ color: "var(--gn-cyan)", fontWeight: 700, marginRight: 6 }}>✓</span>Nearby spots by GPS</li>
-                    <li><span style={{ color: "var(--gn-cyan)", fontWeight: 700, marginRight: 6 }}>✓</span>Live party feed</li>
-                    <li><span style={{ color: "var(--gn-cyan)", fontWeight: 700, marginRight: 6 }}>✓</span>AI itinerary builder</li>
-                  </ul>
-                  <button
-                    onClick={() => openModal(p.key)}
-                    className={p.popular ? "gn-pink-btn gn-pink-btn-md" : "gn-plain-btn"}
-                  >
-                    {p.popular ? `Unlock for Rs ${p.price}` : `Choose ${p.name}`}
-                  </button>
+                  {isSel && (
+                    <div className="gn-plan-tick" style={{ background: accent }}>✓</div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+                <div className="gn-plan-price" style={{ color: p.key === "week" ? "var(--pink)" : "#fff" }}>
+                  Rs {p.price}
+                </div>
+                <div className="gn-plan-perday">{perDay}</div>
+                <div className="gn-plan-divider" />
+                <ul className="gn-plan-feats">
+                  <li><span className="gn-tick">✓</span>Nearby spots by GPS</li>
+                  <li><span className="gn-tick">✓</span>Live party feed</li>
+                  <li><span className="gn-tick">✓</span>AI itinerary builder</li>
+                </ul>
+              </button>
+            );
+          })}
+        </div>
 
-          <div className="gn-fade" style={{ textAlign: "center", marginTop: 28, color: "var(--gn-muted)", fontFamily: "Inter", fontSize: 13, lineHeight: 2 }}>
-            🔒 One-time payment via Razorpay — UPI, card, netbanking<br />
-            📧 Receipt sent to your email instantly<br />
-            ✓ No account needed until you pay
-          </div>
+        <button
+          onClick={() => openModal(selectedPlan)}
+          className="gn-pay-btn"
+          style={{ background: payColors.bg, color: payColors.color, boxShadow: payColors.glow }}
+        >
+          Unlock {sel.name.charAt(0) + sel.name.slice(1).toLowerCase()} — Rs {sel.price} →
+        </button>
+
+        <div className="gn-trust">
+          🔒 Razorpay secured · UPI · Card · Netbanking<br />
+          No account needed until you pay
         </div>
       </section>
-
-      {/* ─────── FINAL CTA ─────── */}
-      <section className="gn-final-cta">
-        <div className="gn-container" style={{ textAlign: "center" }}>
-          <h2 className="gn-fade" style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, lineHeight: 1, margin: 0, letterSpacing: 1 }}>
-            <span style={{ color: "#fff" }}>YOUR GOA TRIP</span>
-            <br />
-            <span style={{ color: "var(--gn-pink)", textShadow: "0 0 30px rgba(255,45,120,0.5)" }}>STARTS HERE.</span>
-          </h2>
-          <p className="gn-fade" style={{ color: "var(--gn-muted)", fontFamily: "Inter", fontSize: 16, lineHeight: 1.6, maxWidth: 320, margin: "20px auto 0" }}>
-            Stop asking strangers. Stop trusting Google. Open GoaNow the moment you land.
-          </p>
-          <button onClick={() => openModal("week")} className="gn-pink-btn gn-pink-btn-lg gn-fade" style={{ marginTop: 28 }}>
-            Get Access Now →
-          </button>
-          <p className="gn-fade" style={{ color: "var(--gn-muted)", fontFamily: "Inter", fontSize: 12, marginTop: 14 }}>
-            {pricingNote}
-          </p>
-        </div>
-      </section>
-
-      {/* ─────── FOOTER ─────── */}
-      <footer className="gn-footer">
-        <div className="gn-container">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, color: "#fff", letterSpacing: 2 }}>
-              GOANOW
-            </span>
-            <span style={{ fontFamily: "Inter", fontSize: 13, color: "var(--gn-muted)" }}>
-              goanow.online
-            </span>
-          </div>
-          <div style={{ textAlign: "center", marginTop: 8, fontFamily: "Inter", fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
-            Built for Goa tourists · Real-time · Updated daily
-          </div>
-        </div>
-      </footer>
 
       <PaywallModal
         open={modalOpen}
@@ -479,532 +320,470 @@ export default function LandingPage() {
 
       <style jsx global>{`
         :root {
-          --gn-bg: #0A0A0F;
-          --gn-bg-alt: #0D0D14;
-          --gn-card: rgba(255,255,255,0.04);
-          --gn-pink: #FF2D78;
-          --gn-cyan: #00F5FF;
-          --gn-gold: #FFD700;
-          --gn-muted: rgba(255,255,255,0.55);
-          --gn-border: rgba(255,255,255,0.08);
+          --bg: #0A0A0F;
+          --card: rgba(255,255,255,0.04);
+          --pink: #FF2D78;
+          --cyan: #00F5FF;
+          --gold: #FFD700;
+          --white: #FFFFFF;
+          --muted: rgba(255,255,255,0.5);
+          --border: rgba(255,255,255,0.08);
         }
-
-        @keyframes gnPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.3); }
-        }
-        @keyframes gnBounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(8px); }
-        }
-
-        .gn-page {
-          background: var(--gn-bg);
-          color: #fff;
+        body {
+          background: var(--bg);
+          color: var(--white);
           font-family: 'Inter', system-ui, sans-serif;
-          font-display: swap;
-          min-height: 100vh;
+          -webkit-font-smoothing: antialiased;
+          overflow-x: hidden;
+          margin: 0;
         }
 
-        .gn-fade {
-          opacity: 0;
-          transform: translateY(20px);
-          transition: opacity 0.5s ease, transform 0.5s ease;
+        @keyframes livePulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255,45,120,0.5); }
+          50% { opacity: 0.85; box-shadow: 0 0 0 5px rgba(255,45,120,0); }
         }
-        .gn-fade.is-visible {
+
+        .gn-root { background: var(--bg); }
+        .gn-rev {
+          opacity: 0;
+          transform: translateY(18px);
+          transition: opacity 0.4s ease, transform 0.4s ease;
+          transition-delay: var(--d, 0ms);
+        }
+        .gn-rev.is-vis {
           opacity: 1;
           transform: translateY(0);
         }
 
         /* NAVBAR */
-        .gn-navbar {
+        .gn-nav {
           position: sticky;
           top: 0;
           z-index: 100;
-          height: 56px;
-          background: rgba(10,10,15,0.95);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border-bottom: 1px solid var(--gn-border);
+          height: 52px;
+          background: rgba(10,10,15,0.92);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border-bottom: 1px solid var(--border);
         }
-        .gn-navbar-inner {
+        .gn-nav-inner {
           height: 100%;
-          max-width: 960px;
-          margin: 0 auto;
           padding: 0 20px;
+          max-width: 1080px;
+          margin: 0 auto;
           display: flex;
           align-items: center;
           justify-content: space-between;
         }
-
-        /* PINK BUTTONS */
-        .gn-pink-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          background: var(--gn-pink);
+        .gn-brand { display: flex; align-items: center; gap: 8px; }
+        .gn-brand-text {
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: 18px;
+          color: #fff;
+          letter-spacing: 3px;
+        }
+        .gn-nav-btn {
+          background: var(--pink);
           color: #fff;
           border: none;
           border-radius: 8px;
+          padding: 9px 16px;
           font-family: 'Inter', sans-serif;
           font-weight: 600;
+          font-size: 13px;
           cursor: pointer;
           text-decoration: none;
-          box-shadow: 0 0 16px rgba(255,45,120,0.35);
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .gn-pink-btn:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 0 28px rgba(255,45,120,0.55);
-        }
-        .gn-pink-btn-lg {
-          width: 100%;
-          height: 56px;
-          border-radius: 14px;
-          font-size: 17px;
-          font-weight: 700;
-          box-shadow: 0 0 24px rgba(255,45,120,0.45), 0 4px 16px rgba(255,45,120,0.3);
-        }
-        .gn-pink-btn-md {
-          width: 100%;
-          height: 48px;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 700;
-          box-shadow: 0 0 20px rgba(255,45,120,0.35);
-        }
-        .gn-ghost-btn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          height: 48px;
-          background: transparent;
-          color: var(--gn-muted);
-          border: 1px solid var(--gn-border);
-          border-radius: 14px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 500;
-          font-size: 15px;
-          cursor: pointer;
-          text-decoration: none;
-          margin-top: 10px;
-          transition: border-color 0.2s ease, color 0.2s ease;
-        }
-        .gn-ghost-btn:hover {
-          border-color: var(--gn-pink);
-          color: #fff;
-        }
-        .gn-plain-btn {
-          width: 100%;
-          height: 48px;
-          background: rgba(255,255,255,0.08);
-          color: #fff;
-          border: 1px solid var(--gn-border);
-          border-radius: 10px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 600;
-          font-size: 14px;
-          cursor: pointer;
-          transition: background 0.15s ease, border-color 0.15s ease;
-        }
-        .gn-plain-btn:hover {
-          background: rgba(255,255,255,0.12);
-          border-color: rgba(255,255,255,0.2);
+          box-shadow: 0 0 14px rgba(255,45,120,0.3);
         }
 
         /* HERO */
         .gn-hero {
-          position: relative;
-          min-height: 100svh;
-          padding: 48px 20px 32px;
-          background:
-            radial-gradient(ellipse at 50% 100%, rgba(255,45,120,0.12) 0%, transparent 60%),
-            radial-gradient(ellipse at 80% 20%, rgba(0,245,255,0.06) 0%, transparent 50%),
-            #0A0A0F;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .gn-hero-content {
-          width: 100%;
-          max-width: 640px;
-          margin: 0 auto;
-        }
-
-        .gn-eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(255,45,120,0.12);
-          border: 1px solid rgba(255,45,120,0.3);
-          border-radius: 20px;
-          padding: 6px 14px;
-          font-family: 'Inter', sans-serif;
-          font-weight: 500;
-          font-size: 12px;
-          letter-spacing: 0.04em;
-        }
-        .gn-eyebrow-pink { color: var(--gn-pink); }
-        .gn-eyebrow-cyan {
-          color: var(--gn-cyan);
-          background: rgba(0,245,255,0.08);
-          border-color: rgba(0,245,255,0.3);
-        }
-
-        .gn-pulse-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--gn-pink);
-          animation: gnPulse 2s infinite;
-        }
-
-        .gn-h1 {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(52px, 13vw, 84px);
-          line-height: 0.95;
-          letter-spacing: 1px;
-          margin: 16px 0 0;
-        }
-        .gn-h2 {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: clamp(38px, 8vw, 48px);
-          line-height: 1;
-          letter-spacing: 1px;
-          color: #fff;
-          margin: 8px 0 16px;
-        }
-
-        .gn-subhead {
-          font-family: 'Inter', sans-serif;
-          font-weight: 600;
-          font-size: 18px;
-          color: #fff;
-          line-height: 1.4;
-          margin: 20px 0 0;
-        }
-        .gn-body {
-          font-family: 'Inter', sans-serif;
-          font-weight: 400;
-          font-size: 15px;
-          color: var(--gn-muted);
-          line-height: 1.65;
-          margin: 12px 0 0;
-        }
-
-        .gn-chip-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 20px;
-        }
-        .gn-chip {
-          background: rgba(255,255,255,0.06);
-          border: 1px solid var(--gn-border);
-          border-radius: 20px;
-          padding: 6px 12px;
-          font-family: 'Inter', sans-serif;
-          font-size: 13px;
-          color: #fff;
-        }
-
-        .gn-cta-stack { margin-top: 28px; }
-
-        .gn-pricing-note {
-          text-align: center;
-          font-family: 'Inter', sans-serif;
-          font-size: 13px;
-          color: var(--gn-muted);
-          margin-top: 14px;
-          line-height: 1.6;
-        }
-
-        .gn-scroll-indicator {
-          position: absolute;
-          bottom: 18px;
-          left: 50%;
-          transform: translateX(-50%);
-          color: var(--gn-muted);
-          font-size: 22px;
-          animation: gnBounce 2s infinite;
-          pointer-events: none;
-        }
-
-        /* SECTIONS */
-        .gn-section {
-          padding: 60px 20px;
-          background: var(--gn-bg);
-        }
-        .gn-section-alt { background: var(--gn-bg-alt); }
-        .gn-container {
-          max-width: 760px;
-          margin: 0 auto;
-        }
-
-        /* PROBLEM CARDS */
-        .gn-problem-stack {
+          min-height: calc(100svh - 52px);
+          padding: 20px 20px 32px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          margin-top: 18px;
+          justify-content: center;
+          background:
+            radial-gradient(ellipse at 50% 90%, rgba(255,45,120,0.12) 0%, transparent 60%),
+            var(--bg);
         }
-        .gn-problem-card {
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,59,59,0.2);
-          border-left: 3px solid #FF3B3B;
-          border-radius: 12px;
-          padding: 18px 20px;
+        .gn-live-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          background: rgba(255,45,120,0.10);
+          border: 1px solid rgba(255,45,120,0.25);
+          border-radius: 20px;
+          padding: 5px 12px;
+          width: fit-content;
+          margin-bottom: 18px;
+          font-family: 'Inter', sans-serif;
+          font-size: 12px;
+          color: var(--pink);
+          font-weight: 500;
         }
-        .gn-problem-title {
+        .gn-live-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: var(--pink);
+          flex-shrink: 0;
+          animation: livePulse 2s infinite;
+        }
+        .gn-h1 {
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: clamp(48px, 13vw, 60px);
+          line-height: 0.9;
+          letter-spacing: 0.5px;
+          margin: 0 0 18px;
+        }
+        .gn-prop {
           font-family: 'Inter', sans-serif;
           font-weight: 600;
-          font-size: 15px;
+          font-size: 17px;
           color: #fff;
+          line-height: 1.4;
           margin: 0 0 6px;
         }
-        .gn-problem-body {
+        .gn-support {
           font-family: 'Inter', sans-serif;
           font-weight: 400;
           font-size: 14px;
-          color: var(--gn-muted);
+          color: var(--muted);
+          line-height: 1.55;
+          margin: 0 0 24px;
+        }
+        .gn-hero-cta {
+          width: 100%;
+          height: 56px;
+          background: var(--pink);
+          color: #fff;
+          border: none;
+          border-radius: 14px;
+          font-family: 'Inter', sans-serif;
+          font-weight: 700;
+          font-size: 17px;
+          cursor: pointer;
+          box-shadow: 0 0 32px rgba(255,45,120,0.45), 0 4px 20px rgba(255,45,120,0.25);
+          transition: transform 0.18s ease;
+          margin-bottom: 12px;
+        }
+        .gn-hero-cta:active { transform: scale(0.98); }
+        .gn-price-hint {
+          text-align: center;
+          font-family: 'Inter', sans-serif;
+          font-size: 12px;
+          color: var(--muted);
           line-height: 1.6;
         }
 
-        .gn-bounce-arrow {
-          color: var(--gn-pink);
+        /* COMPARISON */
+        .gn-compare {
+          padding: 0 20px 48px;
+          text-align: center;
+        }
+        .gn-divider {
+          border-top: 1px solid var(--border);
+          margin-bottom: 32px;
+        }
+        .gn-compare-text {
+          font-family: 'Bebas Neue', sans-serif;
           font-size: 28px;
+          line-height: 1.2;
+          max-width: 340px;
+          margin: 0 auto;
+          letter-spacing: 0.5px;
+        }
+        .gn-compare-text > div + div {
           margin-top: 4px;
-          animation: gnBounce 2s infinite;
+        }
+
+        /* SECTION HELPERS */
+        .gn-features { padding: 48px 20px; background: var(--bg); }
+        .gn-pricing  { padding: 48px 20px 80px; background: var(--bg); }
+        .gn-quote-wrap { padding: 40px 20px; background: #0D0D16; }
+
+        .gn-eyebrow {
+          font-family: 'Inter', sans-serif;
+          font-size: 11px;
+          letter-spacing: 3px;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+          font-weight: 600;
+        }
+        .gn-eyebrow-cyan { color: var(--cyan); }
+        .gn-h2 {
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: 40px;
+          color: #fff;
+          line-height: 1;
+          margin: 0 0 24px;
+          letter-spacing: 0.5px;
         }
 
         /* FEATURE CARDS */
-        .gn-feat-card {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid var(--gn-border);
-          border-radius: 16px;
-          padding: 24px 20px;
-          margin-bottom: 16px;
+        .gn-feat-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
         }
-        .gn-feat-cyan   { border-left: 4px solid var(--gn-cyan); }
-        .gn-feat-pink   { border-left: 4px solid var(--gn-pink); }
-        .gn-feat-gold   { border-left: 4px solid var(--gn-gold); }
-        .gn-feat-violet { border-left: 4px solid #7C3AED; }
+        .gn-feat-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 20px 18px;
+          overflow: hidden;
+          position: relative;
+        }
+        .gn-feat-cyan { border-left: 3px solid var(--cyan); }
+        .gn-feat-pink { border-left: 3px solid var(--pink); }
+        .gn-feat-gold { border-left: 3px solid var(--gold); }
 
         .gn-feat-head {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
-        .gn-icon-badge {
-          width: 40px;
-          height: 40px;
-          display: inline-flex;
+        .gn-feat-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 9px;
+          display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 10px;
-          font-size: 20px;
+          font-size: 18px;
+          flex-shrink: 0;
         }
-        .gn-icon-badge-cyan   { background: rgba(0,245,255,0.10); }
-        .gn-icon-badge-pink   { background: rgba(255,45,120,0.10); }
-        .gn-icon-badge-gold   { background: rgba(255,215,0,0.10); }
-        .gn-icon-badge-violet { background: rgba(124,58,237,0.15); }
-
-        .gn-cat-tag {
+        .gn-feat-cat {
           font-family: 'Inter', sans-serif;
-          font-size: 11px;
-          font-weight: 600;
+          font-size: 10px;
           letter-spacing: 2px;
           text-transform: uppercase;
+          font-weight: 600;
         }
         .gn-feat-title {
           font-family: 'Bebas Neue', sans-serif;
-          font-size: 28px;
+          font-size: 26px;
           color: #fff;
-          margin: 12px 0 8px;
+          line-height: 1.05;
+          margin: 14px 0 8px;
           letter-spacing: 0.5px;
         }
         .gn-feat-body {
           font-family: 'Inter', sans-serif;
-          font-size: 15px;
-          color: var(--gn-muted);
-          line-height: 1.6;
+          font-size: 14px;
+          color: var(--muted);
+          line-height: 1.55;
           margin: 0;
         }
-
         .gn-pill-row {
           display: flex;
           flex-wrap: wrap;
           gap: 6px;
           margin-top: 14px;
         }
-        .gn-mini-pill {
-          background: rgba(255,255,255,0.07);
-          border: 1px solid var(--gn-border);
-          border-radius: 20px;
-          padding: 4px 10px;
+        .gn-pill {
           font-family: 'Inter', sans-serif;
-          font-size: 12px;
+          font-size: 11px;
           color: #fff;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid var(--border);
+          border-radius: 20px;
+          padding: 3px 9px;
         }
-
-        .gn-highlight {
+        .gn-callout {
+          margin-top: 12px;
           border-radius: 8px;
-          padding: 12px 14px;
-          margin-top: 14px;
+          padding: 10px 12px;
           font-family: 'Inter', sans-serif;
           font-size: 13px;
           color: #fff;
           line-height: 1.5;
         }
-        .gn-highlight-pink {
+        .gn-callout-pink {
           background: rgba(255,45,120,0.08);
           border: 1px solid rgba(255,45,120,0.2);
         }
-        .gn-highlight-gold {
-          background: rgba(255,215,0,0.06);
-          border: 1px solid rgba(255,215,0,0.15);
+        .gn-callout-gold {
+          background: rgba(255,215,0,0.05);
+          border: 1px solid rgba(255,215,0,0.12);
         }
 
-        .gn-icon-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-          margin-top: 16px;
-        }
-        .gn-icon-cell {
+        /* QUOTE */
+        .gn-quote-card {
           background: rgba(255,255,255,0.03);
-          border: 1px solid var(--gn-border);
-          border-radius: 10px;
-          padding: 12px 6px;
-          text-align: center;
-          font-family: 'Inter', sans-serif;
-          font-size: 12px;
-          color: var(--gn-muted);
+          border: 1px solid var(--border);
+          border-left: 3px solid var(--pink);
+          border-radius: 14px;
+          padding: 24px 20px;
+          position: relative;
         }
-
-        /* INSIGHT CARDS */
-        .gn-insight-stack {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-top: 18px;
+        .gn-quote-mark {
+          font-size: 64px;
+          color: var(--pink);
+          opacity: 0.3;
+          line-height: 0.5;
+          font-family: Georgia, serif;
+          display: block;
+          margin-bottom: 8px;
         }
-        .gn-insight-card {
-          background: rgba(255,255,255,0.03);
-          border: 1px solid var(--gn-border);
-          border-radius: 12px;
-          padding: 18px 20px;
-        }
-        .gn-insight-title {
+        .gn-quote-text {
           font-family: 'Inter', sans-serif;
           font-weight: 600;
-          font-size: 15px;
+          font-size: 17px;
           color: #fff;
-          margin: 0 0 6px;
+          line-height: 1.55;
+          margin-bottom: 16px;
         }
-        .gn-insight-body {
+        .gn-attr {
           font-family: 'Inter', sans-serif;
-          font-size: 14px;
-          color: var(--gn-muted);
-          line-height: 1.6;
+          font-size: 13px;
+          color: var(--muted);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .gn-attr-dot {
+          width: 6px;
+          height: 6px;
+          background: var(--pink);
+          border-radius: 50%;
+          display: inline-block;
+        }
+        .gn-quote-foot {
+          text-align: center;
+          margin-top: 14px;
+          font-family: 'Inter', sans-serif;
+          font-size: 12px;
+          color: var(--muted);
         }
 
         /* PRICING */
-        .gn-price-stack {
+        .gn-pricing-sub {
+          font-family: 'Inter', sans-serif;
+          font-size: 14px;
+          color: var(--muted);
+          margin: 0 0 24px;
+        }
+        .gn-plans {
           display: flex;
           flex-direction: column;
-          gap: 12px;
-          margin-top: 18px;
+          gap: 10px;
         }
-        @media (min-width: 720px) {
-          .gn-price-stack {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 14px;
-            align-items: stretch;
-          }
-        }
-        .gn-price-card {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid var(--gn-border);
-          border-radius: 16px;
-          padding: 24px 20px;
+        .gn-plan {
           position: relative;
-          display: flex;
-          flex-direction: column;
+          border-radius: 14px;
+          padding: 20px 18px;
+          cursor: pointer;
+          transition: all 0.18s ease;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          color: #fff;
+          font-family: 'Inter', sans-serif;
+          text-align: left;
+          width: 100%;
         }
-        .gn-price-card-popular {
-          background: rgba(255,45,120,0.08);
-          border: 2px solid var(--gn-pink);
-          box-shadow: 0 0 30px rgba(255,45,120,0.15);
-        }
-        .gn-popular-badge {
+        .gn-plan:active { transform: scale(0.99); }
+        .gn-popular-tag {
           position: absolute;
-          top: -10px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: var(--gn-pink);
+          top: -1px;
+          right: 14px;
+          background: var(--pink);
           color: #fff;
           font-family: 'Inter', sans-serif;
           font-weight: 700;
-          font-size: 10px;
-          letter-spacing: 2px;
-          padding: 3px 12px;
-          border-radius: 20px;
+          font-size: 9px;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          padding: 3px 8px;
+          border-radius: 0 0 8px 8px;
         }
-        .gn-price-name {
+        .gn-plan-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .gn-plan-name {
           font-family: 'Bebas Neue', sans-serif;
-          font-size: 22px;
+          font-size: 18px;
           color: #fff;
           letter-spacing: 1px;
         }
-        .gn-price-duration {
-          font-family: 'Inter', sans-serif;
-          font-size: 13px;
-          color: var(--gn-muted);
-          margin-top: 2px;
-        }
-        .gn-price-amount {
-          font-family: 'Bebas Neue', sans-serif;
-          font-size: 52px;
-          line-height: 1;
-          margin-top: 14px;
-        }
-        .gn-price-subline {
+        .gn-plan-dur {
           font-family: 'Inter', sans-serif;
           font-size: 12px;
-          color: var(--gn-muted);
-          margin-top: 4px;
+          color: var(--muted);
+          margin-top: 2px;
         }
-        .gn-price-divider {
-          height: 1px;
-          background: var(--gn-border);
-          margin: 16px 0;
+        .gn-plan-tick {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
-        .gn-price-features {
+        .gn-plan-price {
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: 44px;
+          line-height: 1;
+          margin-top: 12px;
+        }
+        .gn-plan-perday {
+          font-family: 'Inter', sans-serif;
+          font-size: 12px;
+          color: var(--muted);
+          margin-top: 2px;
+        }
+        .gn-plan-divider {
+          margin: 14px 0;
+          border-top: 1px solid var(--border);
+        }
+        .gn-plan-feats {
           list-style: none;
           padding: 0;
-          margin: 0 0 18px;
+          margin: 0;
           font-family: 'Inter', sans-serif;
-          font-size: 13px;
+        }
+        .gn-plan-feats li {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
           color: #fff;
-          line-height: 2;
-          flex: 1;
+          font-size: 13px;
+        }
+        .gn-tick {
+          color: var(--cyan);
+          font-size: 13px;
+          font-weight: 700;
         }
 
-        /* FINAL CTA */
-        .gn-final-cta {
-          padding: 80px 20px;
-          background: linear-gradient(180deg, #0A0A0F 0%, #110818 100%);
+        .gn-pay-btn {
+          margin-top: 16px;
+          width: 100%;
+          height: 58px;
+          border: none;
+          border-radius: 14px;
+          font-family: 'Inter', sans-serif;
+          font-weight: 700;
+          font-size: 17px;
+          cursor: pointer;
+          transition: transform 0.18s ease;
         }
+        .gn-pay-btn:active { transform: scale(0.98); }
 
-        /* FOOTER */
-        .gn-footer {
-          padding: 24px 20px;
-          background: #060608;
-          border-top: 1px solid var(--gn-border);
+        .gn-trust {
+          text-align: center;
+          margin-top: 14px;
+          font-family: 'Inter', sans-serif;
+          font-size: 12px;
+          color: var(--muted);
+          line-height: 1.9;
         }
       `}</style>
     </main>

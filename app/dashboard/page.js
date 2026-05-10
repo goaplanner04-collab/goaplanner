@@ -10,10 +10,11 @@ import ItineraryBuilder from "@/components/ItineraryBuilder";
 import LoadingSkeleton, { PulsingDotLoader } from "@/components/LoadingSkeleton";
 import ShareButton from "@/components/ShareButton";
 import TrialPaywall from "@/components/TrialPaywall";
+import TrialInterstitial from "@/components/TrialInterstitial";
 import PaywallModal from "@/components/PaywallModal";
 import { getDistanceKm } from "@/lib/haversine";
 import { getSavedTheme, applyTheme } from "@/lib/theme";
-import { hasPaidAccess, getTrialStatus, startTrial, formatCountdown } from "@/lib/trialUtils";
+import { hasPaidAccess, getTrialStatus, formatCountdown } from "@/lib/trialUtils";
 
 const TABS = [
   { key: "nearby", label: "📍 Nearby", icon: null },
@@ -66,10 +67,13 @@ export default function DashboardPage() {
   const [trialMs, setTrialMs] = useState(null);
   const [showUnlockToast, setShowUnlockToast] = useState(false);
   const [bannerModalOpen, setBannerModalOpen] = useState(false);
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const [showSkipModal, setShowSkipModal] = useState(false);
   const wasTrialExpiredRef = useRef(false);
 
-  // Auth gate — allow paid users AND trial users (active or expired).
-  // The TrialPaywall overlay handles the lockout when trial is up.
+  // Auth gate. Email required (must be signed in). Trial choice is then
+  // handled in render: paid → dashboard; no choice → interstitial;
+  // skip choice → PaywallModal directly; trial choice → dashboard + timer.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const email = (localStorage.getItem("goanow_email") || "").trim();
@@ -77,24 +81,52 @@ export default function DashboardPage() {
       router.replace("/");
       return;
     }
-    // Make sure a trial has started for signed-in users with no paid pass
-    startTrial();
 
     const expiry = parseInt(localStorage.getItem("goanow_expiry") || "0", 10);
-    const trialStart = localStorage.getItem("goanow_trial_start");
-    const hasPaidValid = expiry && expiry > Date.now();
-    const expiredPaid = expiry && expiry <= Date.now();
-
+    const expiredPaid = expiry && expiry <= Date.now() && !localStorage.getItem("goanow_trial_choice");
     if (expiredPaid) {
       router.replace("/expired");
       return;
     }
-    if (!hasPaidValid && !trialStart) {
-      router.replace("/");
-      return;
+
+    const paid = !!(expiry && expiry > Date.now());
+    const choice = localStorage.getItem("goanow_trial_choice");
+    if (!paid) {
+      if (!choice) {
+        setShowInterstitial(true);
+      } else if (choice === "skip") {
+        setShowSkipModal(true);
+      }
     }
+
     setAuthChecked(true);
   }, [router]);
+
+  const handleTrialChoice = () => {
+    try {
+      localStorage.setItem("goanow_trial_choice", "trial");
+      localStorage.setItem("goanow_trial_start", String(Date.now()));
+      localStorage.setItem("goanow_trial_expired", "false");
+    } catch {}
+    setShowInterstitial(false);
+    // Kick the trial timer immediately
+    const status = getTrialStatus();
+    if (status.active) setTrialMs(status.remainingMs);
+  };
+
+  const handleBuyNowChoice = () => {
+    try { localStorage.setItem("goanow_trial_choice", "skip"); } catch {}
+    setShowInterstitial(false);
+    setShowSkipModal(true);
+  };
+
+  const handleSkipModalClose = () => {
+    // User backed out of buying without paying. Reset their choice so the
+    // interstitial gets another shot, and send them back to the landing.
+    try { localStorage.removeItem("goanow_trial_choice"); } catch {}
+    setShowSkipModal(false);
+    router.replace("/");
+  };
 
   // Trial state polling — checks every second for the banner countdown
   // and every 3 seconds for hard expiry.
@@ -164,6 +196,25 @@ export default function DashboardPage() {
     return (
       <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <PulsingDotLoader text="Checking your pass..." />
+      </main>
+    );
+  }
+
+  // First-time user — show choice screen instead of dashboard
+  if (showInterstitial) {
+    return <TrialInterstitial onTrialStart={handleTrialChoice} onBuyNow={handleBuyNowChoice} />;
+  }
+
+  // User picked "buy now" earlier — show paywall straight away
+  if (showSkipModal) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#0A0A0F" }}>
+        <PaywallModal
+          open={showSkipModal}
+          onClose={handleSkipModalClose}
+          initialPlan="day"
+          autoAdvance={true}
+        />
       </main>
     );
   }
