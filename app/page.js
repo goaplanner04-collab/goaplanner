@@ -213,7 +213,7 @@ export default function LandingPage() {
       position: "sticky",
       top: 0,
       zIndex: 100,
-      height: 72,
+      height: 80,
       background: COLORS.white,
       borderBottom: `1px solid ${COLORS.border}`,
       boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
@@ -228,7 +228,7 @@ export default function LandingPage() {
       justifyContent: "space-between",
     },
     logo: {
-      height: 56,
+      height: 72,
       width: "auto",
       objectFit: "contain",
       display: "block",
