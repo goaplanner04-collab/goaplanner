@@ -225,13 +225,20 @@ export default function LandingPage() {
       padding: "0 20px",
       display: "flex",
       alignItems: "center",
-      justifyContent: "space-between",
+      justifyContent: "center",
+      position: "relative",
     },
     logo: {
-      height: 72,
+      height: 80,
       width: "auto",
       objectFit: "contain",
       display: "block",
+    },
+    navBtnWrap: {
+      position: "absolute",
+      right: 20,
+      top: "50%",
+      transform: "translateY(-50%)",
     },
     navBtn: {
       background: COLORS.teal,
@@ -566,9 +573,11 @@ export default function LandingPage() {
       <nav style={s.nav}>
         <div style={s.navInner}>
           <img src="/logo.png" alt="GoaNow" style={s.logo} />
-          <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
-            {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
-          </button>
+          <div style={s.navBtnWrap}>
+            <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
+              {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
+            </button>
+          </div>
         </div>
       </nav>
 
