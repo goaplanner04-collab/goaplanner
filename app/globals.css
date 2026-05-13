@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Landing page navbar logo */
+img.gn-nav-logo {
+  height: 110px !important;
+  width: auto !important;
+  display: block !important;
+  object-fit: contain !important;
+}
+
+@media (max-width: 360px) {
+  img.gn-nav-logo {
+    height: 88px !important;
+  }
+}
+
 :root {
   --bg-primary: #FFFFFF;
   --bg-card: #FFFFFF;

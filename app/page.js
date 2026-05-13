@@ -226,11 +226,6 @@ export default function LandingPage() {
       alignItems: "center",
       justifyContent: "space-between",
     },
-    navSpacer: {
-      /* mirrors the button width so logo stays truly centered */
-      visibility: "hidden",
-      pointerEvents: "none",
-    },
     logo: {
       display: "block",
       width: "auto",
@@ -570,14 +565,13 @@ export default function LandingPage() {
       {/* NAVBAR */}
       <nav style={s.nav}>
         <div style={s.navInner}>
-          {/* left spacer — same content as button, invisible, keeps logo centered */}
-          <button aria-hidden="true" style={{ ...s.navBtn, ...s.navSpacer }}>
-            {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
-          </button>
-          <img src="/logo.png" alt="GoaNow" className="gn-nav-logo" style={s.logo} />
-          <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
-            {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
-          </button>
+          <div style={{ flex: 1 }} />
+          <img src="/logo.png" alt="GoaNow" className="gn-nav-logo" style={{ height: 110, width: "auto", objectFit: "contain", display: "block" }} />
+          <div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
+              {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -736,25 +730,6 @@ export default function LandingPage() {
         .gn-pay:active { transform: scale(0.98); }
         .gn-pay:hover { filter: brightness(1.05); }
 
-        /* Navbar logo — responsive sizing */
-        .gn-nav-logo {
-          height: 110px;
-          width: auto;
-          display: block;
-          object-fit: contain;
-        }
-
-        @media (max-width: 380px) {
-          .gn-nav-logo {
-            height: 90px;
-          }
-        }
-
-        @media (min-width: 640px) {
-          .gn-nav-logo {
-            height: 90px;
-          }
-        }
       `}</style>
     </main>
   );
