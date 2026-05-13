@@ -40,9 +40,9 @@ export default function TrialPaywall() {
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        background: "rgba(8, 8, 12, 0.98)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
+        background: "rgba(255, 255, 255, 0.96)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -51,80 +51,80 @@ export default function TrialPaywall() {
     >
       <div
         style={{
-          background: "#111119",
-          border: "1px solid rgba(255,45,120,0.2)",
-          borderRadius: 24,
-          padding: "36px 24px",
+          background: "#FFFFFF",
+          border: "1px solid #E2E8ED",
+          borderRadius: 20,
+          padding: "32px 24px",
           maxWidth: 380,
           width: "100%",
-          boxShadow: "0 0 80px rgba(255,45,120,0.07), 0 40px 80px rgba(0,0,0,0.4)",
+          boxShadow: "0 12px 40px rgba(0,119,168,0.15)",
           textAlign: "center",
         }}
       >
-        <div style={{ fontSize: 48, marginBottom: 20, lineHeight: 1 }}>⏰</div>
+        <div style={{ fontSize: 44, marginBottom: 16, lineHeight: 1 }}>⏰</div>
 
         <h2
           style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 40,
-            color: "#fff",
-            lineHeight: 1,
-            letterSpacing: 1,
-            margin: "0 0 12px",
+            fontFamily: "Inter, sans-serif",
+            fontWeight: 800,
+            fontSize: 28,
+            color: "#1B3A5C",
+            lineHeight: 1.15,
+            letterSpacing: -0.01,
+            margin: "0 0 10px",
           }}
         >
-          YOUR 10 MINUTES
-          <br />
-          ARE UP.
+          Your 10 minutes are up.
         </h2>
 
         <p
           style={{
             fontFamily: "Inter, sans-serif",
-            fontSize: 15,
-            color: "rgba(255,255,255,0.65)",
+            fontSize: 14,
+            color: "#6B7E8F",
             lineHeight: 1.6,
-            margin: "0 auto 28px",
+            margin: "0 auto 24px",
             maxWidth: 300,
           }}
         >
-          You've seen what GoaNow can do. Keep exploring for just Rs {prices.day} today.
+          You&apos;ve seen what GoaNow can do. Keep exploring for just ₹{prices.day} today.
         </p>
 
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", marginBottom: 28 }} />
+        <div style={{ borderTop: "1px solid #E2E8ED", marginBottom: 22 }} />
 
         <div
           style={{
             fontFamily: "Inter, sans-serif",
+            fontWeight: 600,
             fontSize: 11,
-            color: "rgba(255,255,255,0.4)",
-            letterSpacing: 3,
+            color: "#00B4C6",
+            letterSpacing: 2.5,
             textTransform: "uppercase",
-            marginBottom: 8,
+            marginBottom: 6,
           }}
         >
-          FULL ACCESS TODAY
-        </div>
-
-        <div
-          style={{
-            fontFamily: "'Bebas Neue', sans-serif",
-            fontSize: 80,
-            color: "#FF2D78",
-            lineHeight: 1,
-            textShadow: "0 0 40px rgba(255,45,120,0.4)",
-          }}
-        >
-          Rs {prices.day}
+          Full access today
         </div>
 
         <div
           style={{
             fontFamily: "Inter, sans-serif",
-            fontSize: 14,
-            color: "rgba(255,255,255,0.5)",
+            fontWeight: 800,
+            fontSize: 56,
+            color: "#1B3A5C",
+            lineHeight: 1,
+          }}
+        >
+          ₹{prices.day}
+        </div>
+
+        <div
+          style={{
+            fontFamily: "Inter, sans-serif",
+            fontSize: 13,
+            color: "#6B7E8F",
             marginTop: 4,
-            marginBottom: 24,
+            marginBottom: 22,
           }}
         >
           for 24 hours · one-time · no subscription
@@ -135,21 +135,21 @@ export default function TrialPaywall() {
           className="gn-trial-pay-btn"
           style={{
             width: "100%",
-            height: 58,
-            background: "#FF2D78",
+            height: 54,
+            background: "#00B4C6",
             border: "none",
-            borderRadius: 14,
+            borderRadius: 12,
             fontFamily: "Inter, sans-serif",
             fontWeight: 700,
-            fontSize: 18,
-            color: "#fff",
+            fontSize: 16,
+            color: "#FFFFFF",
             cursor: "pointer",
-            boxShadow: "0 0 32px rgba(255,45,120,0.5), 0 4px 20px rgba(255,45,120,0.3)",
+            boxShadow: "0 4px 16px rgba(0,180,198,0.35)",
             transition: "all 0.18s ease",
             marginBottom: 12,
           }}
         >
-          Unlock for Rs {prices.day} →
+          Unlock for ₹{prices.day} →
         </button>
 
         <div
@@ -157,7 +157,7 @@ export default function TrialPaywall() {
             marginTop: 4,
             fontFamily: "Inter, sans-serif",
             fontSize: 13,
-            color: "rgba(255,255,255,0.35)",
+            color: "#6B7E8F",
           }}
         >
           Or:{" "}
@@ -170,12 +170,12 @@ export default function TrialPaywall() {
               padding: 0,
               fontFamily: "Inter, sans-serif",
               fontSize: 13,
-              color: "rgba(255,255,255,0.5)",
+              color: "#0077A8",
               textDecoration: "underline",
               cursor: "pointer",
             }}
           >
-            Rs {prices.week} for a week
+            ₹{prices.week} for a week
           </button>
           {" · "}
           <button
@@ -187,12 +187,12 @@ export default function TrialPaywall() {
               padding: 0,
               fontFamily: "Inter, sans-serif",
               fontSize: 13,
-              color: "rgba(255,255,255,0.5)",
+              color: "#0077A8",
               textDecoration: "underline",
               cursor: "pointer",
             }}
           >
-            Rs {prices.trip} for a month
+            ₹{prices.trip} for a month
           </button>
         </div>
 
@@ -201,7 +201,7 @@ export default function TrialPaywall() {
             marginTop: 20,
             fontFamily: "Inter, sans-serif",
             fontSize: 11,
-            color: "rgba(255,255,255,0.25)",
+            color: "#6B7E8F",
           }}
         >
           🔒 Razorpay · UPI · Card · Netbanking
@@ -221,6 +221,10 @@ export default function TrialPaywall() {
       <style jsx>{`
         .gn-trial-pay-btn:active {
           transform: scale(0.98);
+        }
+        .gn-trial-pay-btn:hover {
+          background: #009DB5;
+          box-shadow: 0 6px 20px rgba(0,180,198,0.45);
         }
       `}</style>
     </div>

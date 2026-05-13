@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Icon from "@/components/Icon";
+import { getTrialStatus, hasPaidAccess } from "@/lib/trialUtils";
 
 function ItineraryWithPhotos({ text, placePhotos }) {
   if (!text) return null;
@@ -10,7 +11,7 @@ function ItineraryWithPhotos({ text, placePhotos }) {
   const placeNames = Object.keys(placePhotos).sort((a, b) => b.length - a.length);
 
   return (
-    <div style={{ lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ lineHeight: 1.7, fontSize: 15, color: "var(--text-primary)", fontFamily: "'Inter', sans-serif" }}>
       {lines.map((line, idx) => {
         let matched = null;
         if (line.startsWith("📍")) {
@@ -115,6 +116,21 @@ export default function ItineraryBuilder() {
     setError(null);
     setClarification(null);
     setLimitModal(null);
+
+    // Trial users get exactly ONE itinerary build. Paid users skip this check.
+    if (!hasPaidAccess() && getTrialStatus().active) {
+      let used = "0";
+      try { used = localStorage.getItem("goanow_trial_itinerary_used") || "0"; } catch {}
+      if (used === "1") {
+        setLimitModal({
+          message: "Free trial includes 1 AI itinerary build. Unlock a pass to build more.",
+          canBuyExtension: false,
+        });
+        setBuildsRemaining(0);
+        return;
+      }
+    }
+
     setLoading(true);
     setResult(null);
     setMeta(null);
@@ -176,6 +192,12 @@ export default function ItineraryBuilder() {
         data.placePhotos && typeof data.placePhotos === "object" ? data.placePhotos : null
       );
       if (typeof data.buildsRemaining === "number") setBuildsRemaining(data.buildsRemaining);
+
+      // Lock further AI itinerary builds for trial users after their first success
+      if (!hasPaidAccess() && getTrialStatus().active) {
+        try { localStorage.setItem("goanow_trial_itinerary_used", "1"); } catch {}
+        setBuildsRemaining(0);
+      }
 
       // analytics fire-and-forget
       fetch("/api/analytics", {
@@ -511,7 +533,7 @@ export default function ItineraryBuilder() {
       {/* CLARIFICATION CARD */}
       {clarification && (
         <div className="glass-card" style={{ padding: 18 }}>
-          <p style={{ margin: "0 0 12px", color: "#fff", lineHeight: 1.55 }}>{clarification.message}</p>
+          <p style={{ margin: "0 0 12px", color: "var(--text-primary)", lineHeight: 1.55 }}>{clarification.message}</p>
 
           {clarification.type === "transport" && clarification.transportOptions?.length > 0 ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
@@ -523,7 +545,7 @@ export default function ItineraryBuilder() {
                   style={{
                     fontSize: 13, padding: "12px 14px", minHeight: 56,
                     textAlign: "left", display: "flex", alignItems: "center", gap: 10,
-                    borderColor: "rgba(0,245,255,0.5)", color: "#fff", lineHeight: 1.3,
+                    borderColor: "rgba(0,180,198,0.4)", color: "var(--text-primary)", lineHeight: 1.3,
                   }}
                 >
                   <span style={{ fontSize: 22 }}>{opt.emoji}</span>
@@ -574,7 +596,7 @@ export default function ItineraryBuilder() {
           {placePhotos && Object.keys(placePhotos).length > 0 ? (
             <ItineraryWithPhotos text={result} placePhotos={placePhotos} />
           ) : (
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15, color: "#fff", fontFamily: "'Inter', sans-serif" }}>
+            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, fontSize: 15, color: "var(--text-primary)", fontFamily: "'Inter', sans-serif" }}>
               {result}
             </div>
           )}

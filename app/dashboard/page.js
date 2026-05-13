@@ -208,7 +208,7 @@ export default function DashboardPage() {
   // User picked "buy now" earlier — show paywall straight away
   if (showSkipModal) {
     return (
-      <main style={{ minHeight: "100vh", background: "#0A0A0F" }}>
+      <main style={{ minHeight: "100vh", background: "#FFFFFF" }}>
         <PaywallModal
           open={showSkipModal}
           onClose={handleSkipModalClose}
@@ -232,9 +232,8 @@ export default function DashboardPage() {
       {trialBannerActive && (
         <div
           style={{
-            background:
-              "linear-gradient(90deg, rgba(0,245,255,0.08) 0%, rgba(255,45,120,0.08) 100%)",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            background: "rgba(0,180,198,0.08)",
+            borderBottom: "1px solid var(--border-glass)",
             padding: "9px 20px",
             display: "flex",
             alignItems: "center",
@@ -245,22 +244,23 @@ export default function DashboardPage() {
             zIndex: 41,
           }}
         >
-          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 13, color: "#fff" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
             ⏱ {formatCountdown(trialMs)} of free trial left
           </div>
           <button
             onClick={() => setBannerModalOpen(true)}
             style={{
-              background: "#FF2D78",
+              background: "var(--neon-pink)",
               color: "#fff",
               border: "none",
-              borderRadius: 6,
-              padding: "6px 12px",
+              borderRadius: 8,
+              padding: "6px 14px",
               fontFamily: "Inter, sans-serif",
               fontWeight: 600,
               fontSize: 12,
               cursor: "pointer",
               whiteSpace: "nowrap",
+              boxShadow: "0 2px 8px rgba(0,180,198,0.3)",
             }}
           >
             Unlock Rs 8
@@ -318,7 +318,7 @@ export default function DashboardPage() {
             bottom: 24,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "#FF2D78",
+            background: "var(--neon-pink)",
             color: "#fff",
             fontFamily: "Inter, sans-serif",
             fontWeight: 600,
@@ -326,7 +326,7 @@ export default function DashboardPage() {
             padding: "12px 24px",
             borderRadius: 12,
             zIndex: 10000,
-            boxShadow: "0 0 20px rgba(255,45,120,0.4)",
+            boxShadow: "0 6px 24px rgba(0,180,198,0.4)",
           }}
         >
           Access unlocked! 🎉
@@ -348,10 +348,10 @@ function NearbyPill({ catKey, emoji, label, active, setCategory, forYou }) {
         gap: 6,
         padding: forYou ? "10px 14px" : "8px 14px",
         borderRadius: 20,
-        fontFamily: forYou ? "'Bebas Neue'" : "Inter, sans-serif",
-        fontSize: forYou ? 16 : 13,
-        letterSpacing: forYou ? "0.05em" : undefined,
-        fontWeight: 500,
+        fontFamily: "Inter, sans-serif",
+        fontSize: forYou ? 15 : 13,
+        letterSpacing: 0,
+        fontWeight: forYou ? 700 : 500,
         cursor: "pointer",
         border: `1px solid ${isActive ? "var(--neon-pink)" : "var(--border-glass)"}`,
         background: isActive ? "var(--neon-pink)" : "var(--bg-card)",
@@ -497,7 +497,7 @@ function NearbyTab() {
     <div>
       {locStatus === "denied" && !coords && (
         <div className="glass-card" style={{ padding: 18, marginBottom: 16 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff", fontSize: 14, marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", color: "var(--text-primary)", fontSize: 14, marginBottom: 10 }}>
             <Icon name="map-pin" size={17} style={{ color: "var(--neon-cyan)" }} />
             We could not access your location.
           </div>
@@ -549,9 +549,7 @@ function NearbyTab() {
           width: "100%",
           height: 120,
           borderRadius: 12,
-          background: "linear-gradient(135deg, #FF2D78, #FF6B6B, #00F5FF, #FF2D78)",
-          backgroundSize: "300% 300%",
-          animation: "gradientShift 4s ease infinite",
+          background: "linear-gradient(135deg, #00B4C6 0%, #0077A8 100%)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -560,11 +558,12 @@ function NearbyTab() {
           opacity: heroVisible ? 1 : 0,
           transition: "opacity 0.5s ease",
           pointerEvents: "none",
+          boxShadow: "0 4px 16px rgba(0,180,198,0.25)",
         }}>
-          <div style={{ fontFamily: "'Bebas Neue'", fontSize: 24, color: "#fff", letterSpacing: 0.5 }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 20, color: "#fff", letterSpacing: 0 }}>
             🌴 What&apos;s good near you in Goa?
           </div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 4 }}>
             Live spots pulled from Google Maps
           </div>
         </div>
@@ -622,8 +621,9 @@ function NearbyTab() {
       {/* Section header for non-featured categories */}
       {!isFeatured && activeCat && !placesLoading && sorted.length > 0 && (
         <div style={{
-          fontFamily: "'Bebas Neue'",
-          fontSize: 18,
+          fontFamily: "Inter, sans-serif",
+          fontWeight: 600,
+          fontSize: 15,
           color: "var(--text-muted)",
           marginBottom: 12,
         }}>
@@ -775,7 +775,7 @@ function EventsTab() {
                   padding: "7px 14px",
                   borderRadius: 999,
                   border: active ? "1.5px solid var(--neon-pink)" : "1px solid var(--border-glass)",
-                  background: active ? "rgba(255,61,129,0.15)" : "rgba(255,255,255,0.04)",
+                  background: active ? "var(--neon-pink)" : "#FFFFFF",
                   color: active ? "#fff" : "var(--text-muted)",
                   fontSize: 13,
                   fontWeight: active ? 600 : 400,
@@ -802,7 +802,7 @@ function EventsTab() {
       {!loading && events && events.length === 0 && (
         <div className="glass-card" style={{ padding: 36, textAlign: "center", display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
           <span className="icon-tile"><Icon name="music" size={24} /></span>
-          <h3 style={{ margin: 0, fontSize: 24, color: "#fff" }}>No parties listed yet</h3>
+          <h3 style={{ margin: 0, fontSize: 22, color: "var(--text-primary)" }}>No parties listed yet</h3>
           <div style={{ color: "var(--text-muted)", fontSize: 14 }}>Check back after 6 PM. We update the feed daily.</div>
           <div style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 6 }}>
             Check Instagram:{" "}
@@ -989,11 +989,12 @@ function SettingsTab() {
     <div>
       <h2 style={{
         margin: "8px 0 22px",
-        fontFamily: "'Bebas Neue'",
-        fontSize: 36,
+        fontFamily: "Inter, sans-serif",
+        fontWeight: 700,
+        fontSize: 28,
         color: "var(--text-primary)",
-        letterSpacing: 0.5,
-        lineHeight: 1.1,
+        letterSpacing: -0.01,
+        lineHeight: 1.2,
       }}>
         Settings
       </h2>
@@ -1013,9 +1014,9 @@ function SettingsTab() {
                 onClick={() => handleThemeChange(opt.key)}
                 style={{
                   padding: 16,
-                  borderRadius: 8,
+                  borderRadius: 10,
                   textAlign: "center",
-                  background: active ? "rgba(255,45,120,0.08)" : "var(--bg-card)",
+                  background: active ? "rgba(0,180,198,0.06)" : "#FFFFFF",
                   border: active ? "2px solid var(--neon-pink)" : "1px solid var(--border-glass)",
                   color: "var(--text-primary)",
                   cursor: "pointer",

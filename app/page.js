@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PaywallModal from "@/components/PaywallModal";
-import { getBrowserSupabase } from "@/lib/supabaseBrowser";
+import { getBrowserSupabase, signInWithGoogle } from "@/lib/supabaseBrowser";
 
 const COLORS = {
   navy: "#1B3A5C",
@@ -125,9 +125,21 @@ export default function LandingPage() {
     return () => { mounted = false; subscription?.unsubscribe(); };
   }, []);
 
-  // resume modal after OAuth redirect
+  // resume modal OR start trial after OAuth redirect
   useEffect(() => {
     if (!user?.email) return;
+
+    // Branch 1: came back from "Try Free" → start trial and go to dashboard
+    let pendingTrial = "";
+    try { pendingTrial = sessionStorage.getItem("goanow_pending_trial") || ""; } catch {}
+    if (pendingTrial) {
+      try { sessionStorage.removeItem("goanow_pending_trial"); } catch {}
+      startTrialFlags();
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Branch 2: came back from a paid plan CTA → resume PaywallModal
     let pendingPlan = "";
     try { pendingPlan = sessionStorage.getItem("goanow_pending_plan") || ""; } catch {}
     if (!pendingPlan) return;
@@ -135,7 +147,7 @@ export default function LandingPage() {
     setInitialPlan(pendingPlan);
     setAutoAdvance(true);
     setModalOpen(true);
-  }, [user?.email]);
+  }, [user?.email, router]);
 
   const openModal = (plan) => {
     setInitialPlan(plan);
@@ -144,12 +156,42 @@ export default function LandingPage() {
   };
   const closeModal = () => { setModalOpen(false); setAutoAdvance(false); };
 
+  // Set trial localStorage flags so the dashboard skips the interstitial and
+  // starts the 10-min timer. startTrial() in trialUtils is idempotent — it
+  // won't reset the timer if a previous trial start exists (abuse guard).
+  const startTrialFlags = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const existingStart = localStorage.getItem("goanow_trial_start");
+      const expired = localStorage.getItem("goanow_trial_expired") === "true";
+      if (!existingStart && !expired) {
+        localStorage.setItem("goanow_trial_start", String(Date.now()));
+        localStorage.setItem("goanow_trial_expired", "false");
+      }
+      localStorage.setItem("goanow_trial_choice", "trial");
+    } catch {}
+  };
+
   const handleCTA = () => {
+    // Paid users → straight to dashboard
     if (user && hasActivePass) {
       router.push("/dashboard");
-    } else {
-      openModal("week");
+      return;
     }
+
+    // Signed in but no paid pass → start (or resume) trial, then dashboard.
+    // Dashboard handles trial-expired-unpaid case by showing the paywall overlay.
+    if (user?.email) {
+      startTrialFlags();
+      router.push("/dashboard");
+      return;
+    }
+
+    // Not signed in → trigger Google OAuth, mark intent so we auto-resume on return
+    try { sessionStorage.setItem("goanow_pending_trial", "1"); } catch {}
+    signInWithGoogle().catch(() => {
+      try { sessionStorage.removeItem("goanow_pending_trial"); } catch {}
+    });
   };
 
   const selectedPlan = PLANS.find((p) => p.key === selected) || PLANS[1];
@@ -171,7 +213,7 @@ export default function LandingPage() {
       position: "sticky",
       top: 0,
       zIndex: 100,
-      height: 60,
+      height: 72,
       background: COLORS.white,
       borderBottom: `1px solid ${COLORS.border}`,
       boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
@@ -186,7 +228,7 @@ export default function LandingPage() {
       justifyContent: "space-between",
     },
     logo: {
-      height: 36,
+      height: 56,
       width: "auto",
       objectFit: "contain",
       display: "block",
@@ -509,9 +551,9 @@ export default function LandingPage() {
       marginTop: 4,
     },
     footerLogo: {
-      height: 28,
-      opacity: 0.6,
-      marginTop: 12,
+      height: 44,
+      opacity: 0.7,
+      marginTop: 14,
       display: "block",
       marginLeft: "auto",
       marginRight: "auto",

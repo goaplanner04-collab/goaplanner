@@ -87,11 +87,12 @@ export default function HotelCard({ hotel, stayType }) {
           <h3
             style={{
               margin: 0,
-              fontFamily: "'Bebas Neue'",
-              fontSize: 26,
-              color: "#fff",
-              lineHeight: 1.1,
-              letterSpacing: 0.5,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 700,
+              fontSize: 18,
+              color: "var(--text-primary)",
+              lineHeight: 1.2,
+              letterSpacing: -0.01,
             }}
           >
             {hotel.name}

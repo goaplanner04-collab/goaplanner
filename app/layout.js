@@ -4,7 +4,7 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#07090e",
+  themeColor: "#FFFFFF",
 };
 
 export const metadata = {
@@ -53,7 +53,7 @@ export default function RootLayout({ children }) {
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('goanow_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('goanow_theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`,
           }}
         />
       </head>

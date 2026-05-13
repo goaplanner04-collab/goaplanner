@@ -100,10 +100,12 @@ export default function SpotCard({ spot, distanceKm }) {
           <div style={{ minWidth: 0 }}>
             <h3 style={{
               margin: 0,
-              fontFamily: "'Bebas Neue'",
-              fontSize: 24,
-              color: "#fff",
-              lineHeight: 1.1,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 700,
+              fontSize: 18,
+              color: "var(--text-primary)",
+              lineHeight: 1.2,
+              letterSpacing: -0.01,
             }}>
               {spot.name}
             </h3>

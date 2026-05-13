@@ -190,16 +190,17 @@ export default function EventCard({ event, distanceKm }) {
           <h3
             style={{
               margin: 0,
-              fontFamily: "'Bebas Neue'",
-              fontSize: 28,
-              color: "var(--neon-pink)",
-              textShadow: "0 0 12px rgba(255,45,120,0.28)",
-              lineHeight: 1.05,
+              fontFamily: "Inter, sans-serif",
+              fontWeight: 700,
+              fontSize: 20,
+              color: "var(--text-primary)",
+              lineHeight: 1.2,
+              letterSpacing: -0.01,
             }}
           >
             {event.name}
           </h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#fff", fontSize: 14, marginTop: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-primary)", fontSize: 14, marginTop: 6, flexWrap: "wrap" }}>
             <Icon name="map-pin" size={14} style={{ color: "var(--neon-cyan)" }} />
             {event.venue}
             <span style={{ color: "var(--text-muted)" }}>{event.area}</span>
@@ -213,7 +214,7 @@ export default function EventCard({ event, distanceKm }) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           {statusBadge}
-          <span className="badge" style={{ background: "rgba(255,255,255,0.06)", color: "#fff", border: "1px solid var(--border-glass)" }}>
+          <span className="badge" style={{ background: "var(--bg-soft)", color: "var(--text-primary)", border: "1px solid var(--border-glass)" }}>
             <Icon name="clock" size={14} />
             {event.start_time}
           </span>

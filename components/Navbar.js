@@ -65,10 +65,9 @@ export default function Navbar({ showPlanBadge = false }) {
         position: "sticky",
         top: 0,
         zIndex: 50,
-        background: "rgba(7, 9, 14, 0.88)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
+        background: "#FFFFFF",
         borderBottom: "1px solid var(--border-glass)",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
       }}
     >
       <div
@@ -83,10 +82,7 @@ export default function Navbar({ showPlanBadge = false }) {
         }}
       >
         <a href="/" className="brand-mark" style={{ fontSize: 14 }}>
-          <span className="app-icon" style={{ width: 34, height: 34 }}>
-            <Icon name="sun" size={18} />
-          </span>
-          GoaNow
+          <img src="/logo.png" alt="GoaNow" style={{ height: 36, width: "auto", display: "block" }} />
         </a>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -97,8 +93,8 @@ export default function Navbar({ showPlanBadge = false }) {
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
-                background: "rgba(255,255,255,0.06)",
-                border: trialUrgent ? "1px solid rgba(255,68,68,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                background: trialUrgent ? "rgba(239,68,68,0.08)" : "rgba(0,180,198,0.08)",
+                border: trialUrgent ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(0,180,198,0.25)",
                 borderRadius: 20,
                 padding: "5px 12px",
               }}
@@ -108,7 +104,7 @@ export default function Navbar({ showPlanBadge = false }) {
                   width: 7,
                   height: 7,
                   borderRadius: "50%",
-                  background: trialUrgent ? "#FF4444" : "#00F5FF",
+                  background: trialUrgent ? "#EF4444" : "var(--neon-pink)",
                   display: "inline-block",
                 }}
               />
@@ -117,7 +113,7 @@ export default function Navbar({ showPlanBadge = false }) {
                   fontFamily: "Inter, sans-serif",
                   fontWeight: 600,
                   fontSize: 12,
-                  color: trialUrgent ? "#FF6B6B" : "#fff",
+                  color: trialUrgent ? "#B91C1C" : "var(--neon-pink)",
                 }}
               >
                 {formatCountdown(trialMs)} free
@@ -133,9 +129,9 @@ export default function Navbar({ showPlanBadge = false }) {
                 gap: 8,
                 padding: "6px 12px",
                 borderRadius: 999,
-                background: "rgba(255, 61, 129, 0.12)",
-                border: "1px solid rgba(255, 61, 129, 0.3)",
-                color: "#fff",
+                background: "rgba(0, 180, 198, 0.08)",
+                border: "1px solid rgba(0, 180, 198, 0.25)",
+                color: "var(--text-primary)",
                 fontSize: 13,
                 fontWeight: 600,
                 whiteSpace: "nowrap",
@@ -144,7 +140,7 @@ export default function Navbar({ showPlanBadge = false }) {
               <span className="pulse-dot" style={{ width: 6, height: 6 }} />
               <span>{planInfo.plan}</span>
               <span style={{ color: "var(--text-muted)" }}>|</span>
-              <span style={{ color: planInfo.expired ? "#f87171" : "var(--neon-cyan)" }}>
+              <span style={{ color: planInfo.expired ? "#DC2626" : "var(--neon-cyan)" }}>
                 {planInfo.label}
               </span>
             </div>

@@ -1,7 +1,5 @@
 "use client";
 
-import Icon from "@/components/Icon";
-
 export default function TrialInterstitial({ onTrialStart, onBuyNow }) {
   return (
     <main
@@ -13,46 +11,51 @@ export default function TrialInterstitial({ onTrialStart, onBuyNow }) {
         justifyContent: "center",
         padding: "32px 24px",
         textAlign: "center",
-        background:
-          "radial-gradient(ellipse at 50% 60%, rgba(255,45,120,0.10) 0%, transparent 60%), #0A0A0F",
-        color: "#fff",
+        background: "#FFFFFF",
+        color: "#1B3A5C",
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Logo + brand */}
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 10, marginBottom: 32 }}>
-        <span className="brand-mark__icon"><Icon name="sun" size={20} /></span>
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "#fff", letterSpacing: 4 }}>
-          GOANOW
-        </span>
-      </div>
+      <img
+        src="/logo.png"
+        alt="GoaNow"
+        style={{ height: 56, width: "auto", marginBottom: 28 }}
+      />
 
-      <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 500, fontSize: 15, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>
+      <div
+        style={{
+          fontFamily: "Inter, sans-serif",
+          fontWeight: 500,
+          fontSize: 14,
+          color: "#6B7E8F",
+          marginBottom: 8,
+        }}
+      >
         Welcome to GoaNow
       </div>
 
       <h1
         style={{
-          fontFamily: "'Bebas Neue', sans-serif",
-          fontSize: 44,
-          color: "#fff",
-          lineHeight: 1,
-          letterSpacing: 1,
-          margin: "0 0 6px",
+          fontFamily: "Inter, sans-serif",
+          fontWeight: 800,
+          fontSize: 32,
+          color: "#1B3A5C",
+          lineHeight: 1.15,
+          letterSpacing: -0.01,
+          margin: "0 0 8px",
+          maxWidth: 320,
         }}
       >
-        HOW DO YOU WANT
-        <br />
-        TO GET STARTED?
+        How do you want to get started?
       </h1>
 
       <p
         style={{
           fontFamily: "Inter, sans-serif",
           fontSize: 14,
-          color: "rgba(255,255,255,0.5)",
+          color: "#6B7E8F",
           lineHeight: 1.6,
-          margin: "0 auto 36px",
+          margin: "0 auto 32px",
           maxWidth: 300,
         }}
       >
@@ -66,40 +69,40 @@ export default function TrialInterstitial({ onTrialStart, onBuyNow }) {
         style={{
           width: "100%",
           maxWidth: 360,
-          background: "#FF2D78",
+          background: "#00B4C6",
           border: "none",
-          borderRadius: 16,
-          padding: "20px 24px",
+          borderRadius: 14,
+          padding: "20px 22px",
           cursor: "pointer",
           textAlign: "left",
-          color: "#fff",
-          boxShadow: "0 0 32px rgba(255,45,120,0.35), 0 4px 20px rgba(255,45,120,0.2)",
+          color: "#FFFFFF",
+          boxShadow: "0 4px 16px rgba(0,180,198,0.35)",
           transition: "all 0.18s ease",
           marginBottom: 12,
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 18, color: "#fff" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 17, color: "#FFFFFF" }}>
               Try Free for 10 mins
             </div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 4 }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 4 }}>
               Full access — no payment needed
             </div>
           </div>
-          <div style={{ fontSize: 28, lineHeight: 1, flexShrink: 0 }}>⏱</div>
+          <div style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>⏱</div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
           {["📍 Nearby spots", "🎉 Party feed", "🗺️ AI itinerary"].map((t) => (
             <span
               key={t}
               style={{
-                background: "rgba(255,255,255,0.15)",
+                background: "rgba(255,255,255,0.18)",
                 borderRadius: 20,
                 padding: "4px 10px",
                 fontFamily: "Inter, sans-serif",
                 fontSize: 11,
-                color: "#fff",
+                color: "#FFFFFF",
               }}
             >
               {t}
@@ -115,32 +118,32 @@ export default function TrialInterstitial({ onTrialStart, onBuyNow }) {
         style={{
           width: "100%",
           maxWidth: 360,
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 16,
-          padding: "18px 24px",
+          background: "#FFFFFF",
+          border: "1px solid #E2E8ED",
+          borderRadius: 14,
+          padding: "18px 22px",
           cursor: "pointer",
           textAlign: "left",
-          color: "#fff",
+          color: "#1B3A5C",
           transition: "all 0.18s ease",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 16, color: "#fff" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 15, color: "#1B3A5C" }}>
               No, buy access now
             </div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
-              Rs 8 for today · Rs 21 for a week
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "#6B7E8F", marginTop: 4 }}>
+              ₹8 for today · ₹21 for a week
             </div>
           </div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 20, color: "rgba(255,255,255,0.4)" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 600, fontSize: 20, color: "#6B7E8F" }}>
             →
           </div>
         </div>
       </button>
 
-      <div style={{ marginTop: 20, fontFamily: "Inter, sans-serif", fontSize: 11, color: "rgba(255,255,255,0.25)" }}>
+      <div style={{ marginTop: 20, fontFamily: "Inter, sans-serif", fontSize: 11, color: "#6B7E8F" }}>
         Trial is 10 minutes. No card required.
       </div>
 
@@ -149,9 +152,13 @@ export default function TrialInterstitial({ onTrialStart, onBuyNow }) {
         .gn-int-buy-btn:active {
           transform: scale(0.98);
         }
+        .gn-int-trial-btn:hover {
+          background: #009DB5;
+          box-shadow: 0 6px 20px rgba(0,180,198,0.45);
+        }
         .gn-int-buy-btn:hover {
-          border-color: rgba(255,255,255,0.2);
-          background: rgba(255,255,255,0.06);
+          border-color: #00B4C6;
+          color: #00B4C6;
         }
       `}</style>
     </main>
