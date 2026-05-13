@@ -213,16 +213,15 @@ export default function LandingPage() {
       position: "sticky",
       top: 0,
       zIndex: 100,
-      height: 80,
       background: COLORS.white,
       borderBottom: `1px solid ${COLORS.border}`,
       boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      overflow: "visible",
     },
     navInner: {
-      height: "100%",
       maxWidth: 440,
       margin: "0 auto",
-      padding: "0 20px",
+      padding: "10px 20px 10px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -571,8 +570,8 @@ export default function LandingPage() {
     <main style={s.page}>
       {/* NAVBAR */}
       <nav style={s.nav}>
-        <div style={s.navInner}>
-          <img src="/logo.png" alt="GoaNow" style={s.logo} />
+        <div style={s.navInner} className="gn-nav-inner">
+          <img src="/logo.png" alt="GoaNow" className="gn-nav-logo" style={{ width: "auto", objectFit: "contain", display: "block" }} />
           <div style={s.navBtnWrap}>
             <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
               {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
@@ -735,6 +734,29 @@ export default function LandingPage() {
 
         .gn-pay:active { transform: scale(0.98); }
         .gn-pay:hover { filter: brightness(1.05); }
+
+        /* Navbar logo — responsive sizing */
+        .gn-nav-logo {
+          height: 80px;
+          width: auto;
+          display: block;
+          object-fit: contain;
+        }
+
+        @media (max-width: 480px) {
+          .gn-nav-logo {
+            height: 82px;
+          }
+          .gn-nav-inner {
+            padding: 8px 16px;
+          }
+        }
+
+        @media (min-width: 481px) {
+          .gn-nav-logo {
+            height: 80px;
+          }
+        }
       `}</style>
     </main>
   );
