@@ -219,9 +219,9 @@ export default function LandingPage() {
       overflow: "visible",
     },
     navInner: {
-      maxWidth: 440,
+      maxWidth: 1100,
       margin: "0 auto",
-      padding: "8px 16px",
+      padding: "8px 24px",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",

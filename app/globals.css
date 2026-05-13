@@ -4,7 +4,7 @@
 
 /* Landing page navbar logo */
 img.gn-nav-logo {
-  height: 110px !important;
+  height: 140px !important;
   width: auto !important;
   display: block !important;
   object-fit: contain !important;
@@ -12,7 +12,20 @@ img.gn-nav-logo {
 
 @media (max-width: 360px) {
   img.gn-nav-logo {
-    height: 88px !important;
+    height: 115px !important;
+  }
+}
+
+/* Desktop / tablet — give the logo room to be seen */
+@media (min-width: 768px) {
+  img.gn-nav-logo {
+    height: 160px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  img.gn-nav-logo {
+    height: 180px !important;
   }
 }
 
