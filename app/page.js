@@ -221,23 +221,20 @@ export default function LandingPage() {
     navInner: {
       maxWidth: 440,
       margin: "0 auto",
-      padding: "10px 20px 10px",
+      padding: "8px 16px",
       display: "flex",
       alignItems: "center",
-      justifyContent: "center",
-      position: "relative",
+      justifyContent: "space-between",
+    },
+    navSpacer: {
+      /* mirrors the button width so logo stays truly centered */
+      visibility: "hidden",
+      pointerEvents: "none",
     },
     logo: {
-      height: 80,
+      display: "block",
       width: "auto",
       objectFit: "contain",
-      display: "block",
-    },
-    navBtnWrap: {
-      position: "absolute",
-      right: 20,
-      top: "50%",
-      transform: "translateY(-50%)",
     },
     navBtn: {
       background: COLORS.teal,
@@ -250,6 +247,8 @@ export default function LandingPage() {
       fontSize: 14,
       cursor: "pointer",
       boxShadow: "0 2px 8px rgba(0,180,198,0.3)",
+      whiteSpace: "nowrap",
+      flexShrink: 0,
     },
     hero: {
       padding: "48px 24px 40px",
@@ -570,13 +569,15 @@ export default function LandingPage() {
     <main style={s.page}>
       {/* NAVBAR */}
       <nav style={s.nav}>
-        <div style={s.navInner} className="gn-nav-inner">
-          <img src="/logo.png" alt="GoaNow" className="gn-nav-logo" style={{ width: "auto", objectFit: "contain", display: "block" }} />
-          <div style={s.navBtnWrap}>
-            <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
-              {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
-            </button>
-          </div>
+        <div style={s.navInner}>
+          {/* left spacer — same content as button, invisible, keeps logo centered */}
+          <button aria-hidden="true" style={{ ...s.navBtn, ...s.navSpacer }}>
+            {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
+          </button>
+          <img src="/logo.png" alt="GoaNow" className="gn-nav-logo" style={s.logo} />
+          <button onClick={handleCTA} className="gn-btn-nav" style={s.navBtn}>
+            {user && hasActivePass ? "Open GoaNow →" : "Try Free"}
+          </button>
         </div>
       </nav>
 
@@ -737,24 +738,21 @@ export default function LandingPage() {
 
         /* Navbar logo — responsive sizing */
         .gn-nav-logo {
-          height: 80px;
+          height: 110px;
           width: auto;
           display: block;
           object-fit: contain;
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 380px) {
           .gn-nav-logo {
-            height: 82px;
-          }
-          .gn-nav-inner {
-            padding: 8px 16px;
+            height: 90px;
           }
         }
 
-        @media (min-width: 481px) {
+        @media (min-width: 640px) {
           .gn-nav-logo {
-            height: 80px;
+            height: 90px;
           }
         }
       `}</style>
